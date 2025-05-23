@@ -1,0 +1,155 @@
+@startuml 实验通信框架库结构图
+
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing true
+skinparam defaultFontName "微软雅黑"
+skinparam defaultFontSize 14
+skinparam roundCorner 15
+skinparam ClassBackgroundColor #AED6F1
+skinparam ClassBorderColor #2874A6
+skinparam PackageBackgroundColor #D6EAF8
+skinparam PackageBorderColor #2E86C1
+skinparam ArrowColor #3498DB
+skinparam TitleFontSize 20
+skinparam TitleFontColor #2C3E50
+skinparam TitleFontStyle bold
+
+title 实验通信框架库结构图
+
+package "SpinQLabLink" {
+    class Client {
+        + createDeviceManager(): DeviceManager && ExperimentManager
+        + registerExperiment(): Experiment
+        + registerExperimentParameter(): ExperimentParameter
+        + connect(host: String, port: int, account: String, password: String): boolean
+        + disconnect()
+        + setDataUpdateCallback(callback: (ExperimentData) -> void): void
+        + setExperimentStatusCallback(callback: (ExperimentStatus) -> void): void
+        + setExperimentFinishedCallback(callback: (ExperimentResult) -> void): void
+        + setExperimentErrorCallback(callback: (String) -> void): void
+        + runExperiment(experimentType: String, params: Map): ExperimentResult
+        + getExperimentResult(): ExperimentResult
+    }
+
+    package "网络通信层" {
+        class Connection {
+            - host: String
+            - port: int
+            - account: String
+            - password: String
+            - socket: Socket
+            - isConnected: boolean
+            
+            + connect(): boolean
+            + disconnect(): boolean
+            + sendData(data: byte[]): boolean
+            + receiveData(): byte[]
+            + isConnected(): boolean
+        }
+    }
+
+    package "设备管理层" {
+        class DeviceManager {
+            - connection: Connection
+            - deviceParameters: Map<String, Object>
+            
+            + connect(host: String, port: int): boolean
+            + disconnect(): boolean
+            + getDeviceParameters(): Map<String, Object>
+            + createExperimentManager(): ExperimentManager
+            + sendExperimentData(data: String): boolean
+            + receiveData(): ExperimentData
+        }
+    }
+
+    package "实验管理层" {
+        class ExperimentManager {
+            - deviceManager: DeviceManager
+            - experiments: Map<String, Experiment>
+            
+            + registerExperiment(type: String): Experiment
+            + registerExperimentParameter(experiment: Experiment, params: Map): boolean
+            + startExperiment(experiment: Experiment): ExperimentResult
+            + processExperimentData(data: ExperimentData)
+            + saveResult(experiment: Experiment): ExperimentResult
+        }
+
+        class Experiment {
+            - type: String
+            - parameters: ExperimentParameter
+            - status: ExperimentStatus
+            - steps: List<ExperimentStep>
+            - result: ExperimentResult
+            
+            + setParameters(params: ExperimentParameter): boolean
+            + getJsonData(): String
+            + processStepData(data: ExperimentData): boolean
+            + processCompletionInfo(data: ExperimentData): boolean
+            + isCompleted(): boolean
+            + getResult(): ExperimentResult
+        }
+
+        class ExperimentParameter {
+            - paramMap: Map<String, Object>
+            
+            + validate(): boolean
+            + getParameterValue(key: String): Object
+            + setParameterValue(key: String, value: Object): boolean
+            + toJson(): String
+        }
+
+        class ExperimentResult {
+            - experimentType: String
+            - resultData: Map<String, Object>
+            - isSuccessful: boolean
+            - errorMessage: String
+            
+            + isSuccessful(): boolean
+            + getResultData(): Map<String, Object>
+            + getErrorMessage(): String
+        }
+
+        class ExperimentData {
+            - dataType: DataType
+            - content: String
+            - isDeviceData: boolean
+            
+            + isDeviceData(): boolean
+            + getContent(): String
+            + getDataType(): DataType
+        }
+
+        enum ExperimentStatus {
+            INITIALIZED
+            RUNNING
+            COMPLETED
+            FAILED
+        }
+
+        enum DataType {
+            PARAMETER
+            STEP_DATA
+            COMPLETION
+            DEVICE_INFO
+            ERROR
+        }
+    }
+}
+
+' 关系定义
+Client --> DeviceManager: 创建、发送请求
+DeviceManager --> Client: 返回结果
+DeviceManager --> Connection: 发送数据
+Connection --> DeviceManager: 接收数据
+DeviceManager --> ExperimentManager: 创建
+ExperimentManager --> Experiment: 管理
+ExperimentManager --> ExperimentParameter: 创建
+ExperimentManager --> ExperimentResult: 生成
+Experiment --> ExperimentParameter: 包含
+Experiment --> ExperimentResult: 生成
+Experiment --> ExperimentStatus: 使用
+ExperimentManager --> ExperimentData: 处理
+ExperimentData --> DataType: 使用
+
+@enduml 

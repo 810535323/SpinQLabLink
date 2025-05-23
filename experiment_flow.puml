@@ -1,0 +1,136 @@
+@startuml 实验通信框架业务流程图
+
+skinparam handwritten false
+skinparam monochrome false
+skinparam shadowing true
+skinparam defaultFontName "微软雅黑"
+skinparam defaultFontSize 14
+skinparam roundCorner 15
+skinparam ArrowColor #3498DB
+skinparam ActivityBorderColor #2E86C1
+skinparam ActivityBackgroundColor #D6EAF8
+skinparam ParticipantBackgroundColor #AED6F1
+skinparam ParticipantBorderColor #2874A6
+skinparam SequenceLifeLineBorderColor #2874A6
+skinparam SequenceLifeLineBackgroundColor #D6EAF8
+skinparam NoteBackgroundColor #FCF3CF
+skinparam NoteBorderColor #F1C40F
+skinparam TitleFontSize 20
+skinparam TitleFontColor #2C3E50
+skinparam TitleFontStyle bold
+skinparam SequenceGroupBackgroundColor #EAEDED
+skinparam SequenceGroupBorderColor #95A5A6
+
+title 实验通信框架业务流程图
+
+participant "实验客户端程序" as Client
+participant "设备管理器" as DeviceManager
+participant "实验管理器" as ExperimentManager
+participant "实验实例" as Experiment
+participant "实验参数" as ExperimentParameter
+participant "实验结果" as ExperimentResult
+participant "TCP网络连接" as Connection
+participant "主机服务器" as Server
+
+== 初始化阶段 ==
+
+Client -> DeviceManager: 创建设备管理器
+activate DeviceManager
+
+DeviceManager->Connection: 创建TCP网络连接
+activate Connection
+Connection -> Server: 建立TCP连接
+activate Server
+Server --> Connection: 连接成功
+Connection --> DeviceManager: 连接成功并返回设备参数
+DeviceManager -> DeviceManager: 解析并保存设备参数
+
+DeviceManager -> ExperimentManager: 创建实验管理器
+activate ExperimentManager
+
+par 并行接收设备参数
+    Server -> Connection: 发送设备参数
+    Connection -> DeviceManager: 接收设备参数
+    DeviceManager -> DeviceManager: 解析并保存设备参数
+end
+
+== 实验初始化阶段 ==
+
+Client -> ExperimentManager: 请求注册实验实例
+Client -> ExperimentManager: 请求注册实验参数
+
+ExperimentManager -> Experiment: 创建实验实例
+ExperimentManager -> ExperimentParameter: 创建实验参数并输入参数
+ExperimentParameter -> ExperimentParameter: 校验参数是否合法
+ExperimentParameter -> Experiment: 设置实验参数
+
+Client -> ExperimentManager: 请求开始实验并阻塞命令窗口
+
+== 实验执行阶段 ==
+
+Experiment -> ExperimentManager: 提取实验json数据
+ExperimentManager -> DeviceManager: 发送实验参数
+DeviceManager -> Connection: 发送参数数据
+Connection -> Server: 发送参数数据
+
+note right of Server
+  服务器开始实验
+end note
+
+Server --> Connection: 确认接收
+Connection -> DeviceManager: 转发实验数据
+DeviceManager -> ExperimentManager: 转发实验数据
+ExperimentManager -> Experiment: 转发实验数据
+Experiment -> Experiment: 等待数据
+
+loop 多个实验步骤
+    Server -> Server: 处理单步数据完成
+
+    Server -> Connection: 返回单步数据
+    Connection -> DeviceManager: 接收单步实验数据
+    DeviceManager -> DeviceManager: 解析数据
+
+    alt 设备数据
+        DeviceManager -> DeviceManager: 保存设备数据
+    else 实验数据
+        DeviceManager -> ExperimentManager: 转发实验数据
+    end
+
+    ExperimentManager -> Experiment: 获取实验数据并处理
+    Experiment -> Experiment: 处理单个步骤信息
+    Experiment -> Experiment: 等待下一个步骤
+end
+
+note right of Server
+    服务器实验完成
+end note
+
+Server -> Connection: 发送实验完成信息和参数
+Connection -> DeviceManager: 接收实验完成信息和参数
+DeviceManager -> ExperimentManager: 转发实验完成信息和参数
+ExperimentManager -> Experiment: 获取实验完成信息和参数
+Experiment -> Experiment: 处理实验完成信息
+
+== 结束阶段 ==
+Experiment -> ExperimentManager: 实验完成
+ExperimentManager -> Experiment: 保存结果并注销实验实例
+ExperimentManager -> ExperimentResult: 保存结果
+deactivate Experiment
+activate ExperimentResult
+ExperimentResult -> Client: 返回结果信息
+deactivate ExperimentResult
+
+Client -> DeviceManager: 断开连接
+DeviceManager -> ExperimentManager: 注销实验管理器
+deactivate ExperimentManager
+
+DeviceManager -> Connection: 请求断开连接
+Connection -> Server: 断开连接
+Server -> Connection: 确认断开
+deactivate Server
+Connection -> DeviceManager: 断开连接成功
+deactivate Connection
+deactivate DeviceManager
+deactivate Client
+
+@enduml 
