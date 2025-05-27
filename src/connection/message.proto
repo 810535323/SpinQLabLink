@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+message BaseMessage {
+  Metadata metadata = 1;
+  string msg_id = 2; // 消息类型
+
+  // 使用oneof实现多消息类型支持
+  oneof message_type {
+    ChartData chart_data = 33;
+    string json_data = 44;
+  } 
+}
+
+message Metadata {
+  int64 sequence_id = 1; // 主动类型的消息需要创建唯一的消息ID，如果是应答消息，必须把请求消息数据包中的这个字段返回，以形成闭环
+  int64 timestamp = 2; // 消息的时间戳
+  string device_id = 3; // 设备id
+  string device_name = 4; // 设备名称
+  string session_id = 5;// 登录得到的会话id
+}
+
+
+message ChartData {
+  string task_id = 1; // 所属任务id
+  string group = 2; // 所属实验
+  string chart_name = 3; // 图表名称
+  optional string path=4; // 图表通道
+  optional string qubit =5; // 图表比特？三比特有，后续扩展
+  optional string step = 6; // 观测步骤
+  repeated DataPointProto points = 7;
+}
+
+// 支持多态类型的 DataPoint
+message DataPointProto {
+  float x = 1;
+  float y = 2;
+}

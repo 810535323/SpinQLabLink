@@ -29,7 +29,30 @@ class LoggerManager:
     @classmethod
     def get_logger(cls, name='spinq', level='info', 
                   log_file=None, max_size=10*1024*1024, backup_count=5,
-                  log_format=None):
+                  log_format='%(asctime)s[%(name)s][%(levelname)s]%(message)s'):
+        """
+        获取日志器实例
+        
+        Args:
+            name: 日志器名称
+            level: 日志级别，可选：debug, info, warning, error, critical
+            log_file: 日志文件路径，None表示只输出到控制台
+            max_size: 单个日志文件最大大小，默认10MB
+            backup_count: 备份日志文件数量，默认5个
+            log_format: 日志格式，默认为None表示使用DEFAULT_FORMAT
+                        可以自定义格式，例如：'%(asctime)s - %(levelname)s - %(message)s'
+                        常用格式化字段包括：
+                        - %(asctime)s：日志时间
+                        - %(name)s：日志器名称
+                        - %(levelname)s：日志级别
+                        - %(filename)s：文件名
+                        - %(lineno)d：行号
+                        - %(funcName)s：函数名
+                        - %(message)s：日志信息
+        
+        Returns:
+            logger: 日志器实例
+        """
         """
         获取日志器实例
         

@@ -5,230 +5,132 @@
 """
 
 import json
-import time
-import uuid
-from typing import Dict, Any, Optional, Tuple, Union
+from typing import Dict, Any, Tuple
+import struct
 
-from ..utils import LoggerManager
-
+from utils import LoggerManager
+from . import message_pb2
 
 # 创建logger
 logger = LoggerManager.get_logger(name='protocol')
 
-
-class MessageType:
-    """消息类型定义"""
-    REQUEST = "request"            # 请求消息
-    RESPONSE = "response"          # 响应消息
-    ERROR = "error"                # 错误消息
-    NOTIFICATION = "notification"  # 通知消息
-    HEARTBEAT = "heartbeat"        # 心跳消息
-
-
-class CommandType:
-    """命令类型定义"""
-    # 实验控制命令
-    START_EXPERIMENT = "start_experiment"    # 启动实验
-    UPLOAD_DATA = "upload_data"              # 上传数据
-    FINISH_EXPERIMENT = "finish_experiment"  # 结束实验
-    GET_RESULT = "get_result"                # 获取结果
-    GET_STATUS = "get_status"                # 获取状态
-    LIST_EXPERIMENTS = "list_experiments"    # 获取实验列表
-    
-    # 系统命令
-    PING = "ping"                # 心跳检测
-    AUTH = "auth"                # 身份认证
-    DISCONNECT = "disconnect"    # 断开连接
-
-
 class Protocol:
-    """实验通信协议类"""
+    """通信协议类，负责数据的打包和解包"""
     
-    # 协议版本
-    VERSION = "1.0"
+    # 包头标识
+    HEADER_MAGIC = 0xFEFE
     
-    # 编码格式
-    ENCODING = "utf-8"
-    
-    def __init__(self):
-        """初始化协议处理器"""
-        self.message_handlers = {}
-    
-    def register_handler(self, command_type: str, handler_func):
+    def serialize_message(self, msg_id: str, metadata: Dict[str, Any], json_data: Dict[str, Any]) -> bytes:
         """
-        注册消息处理器
+        将protobuf消息打包成二进制数据
         
         Args:
-            command_type: 命令类型
-            handler_func: 处理函数
-        """
-        self.message_handlers[command_type] = handler_func
-        logger.debug(f"注册处理器: {command_type}")
-    
-    def pack_message(self, command: str, message_type: str = MessageType.REQUEST,
-                    data: Optional[Dict[str, Any]] = None,
-                    message_id: Optional[str] = None) -> bytes:
-        """
-        打包消息
-        
-        Args:
-            command: 命令类型
-            message_type: 消息类型
-            data: 消息数据
-            message_id: 消息ID，如果为None则自动生成
+            dict_data: 要发送的JSON数据
             
         Returns:
-            bytes: 打包后的消息字节
-        """
-        if message_id is None:
-            message_id = str(uuid.uuid4())
-            
-        if data is None:
-            data = {}
-            
-        message = {
-            "version": self.VERSION,
-            "id": message_id,
-            "type": message_type,
-            "command": command,
-            "timestamp": time.time(),
-            "data": data
-        }
-        
-        try:
-            packed_message = json.dumps(message).encode(self.ENCODING)
-            logger.debug(f"消息打包: {command}, ID: {message_id}, 大小: {len(packed_message)}字节")
-            return packed_message
-        except Exception as e:
-            logger.error(f"消息打包错误: {e}")
-            # 返回一个错误消息
-            error_message = {
-                "version": self.VERSION,
-                "id": message_id,
-                "type": MessageType.ERROR,
-                "command": command,
-                "timestamp": time.time(),
-                "data": {"error": f"消息打包错误: {str(e)}"}
-            }
-            return json.dumps(error_message).encode(self.ENCODING)
-    
-    def unpack_message(self, message_bytes: bytes) -> Tuple[bool, Dict[str, Any]]:
-        """
-        解析消息
-        
-        Args:
-            message_bytes: 消息字节
-            
-        Returns:
-            Tuple[bool, Dict[str, Any]]: (是否成功, 解析后的消息)
+            打包后的二进制数据
         """
         try:
-            message = json.loads(message_bytes.decode(self.ENCODING))
+            # 序列化protobuf消息
+            message_data = message_pb2.BaseMessage()
+            message_data.msg_id = msg_id
+            message_data.metadata.sequence_id = metadata.get("sequence_id")
+            message_data.metadata.timestamp = metadata.get("timestamp")
+            message_data.metadata.device_id = metadata.get("device_id")
+            message_data.metadata.username = metadata.get("device_name")
+            message_data.metadata.session_id = metadata.get("session_id")
+            message_data.json_data = json.dumps(json_data)
             
-            # 验证消息格式
-            required_fields = ["version", "id", "type", "command", "timestamp", "data"]
-            if not all(field in message for field in required_fields):
-                missing_fields = [field for field in required_fields if field not in message]
-                logger.error(f"消息格式错误，缺少字段: {missing_fields}")
-                return False, {"error": f"消息格式错误，缺少字段: {missing_fields}"}
+            # 计算数据长度
+            serialized_message = message_data.SerializeToString()
+            data_length = len(serialized_message)
             
-            logger.debug(f"消息解析: {message['command']}, ID: {message['id']}")
-            return True, message
+            # 组装包头: 魔数(2字节) + 长度(4字节)
+            # '>HI'中的'>'表示大端字节序，'H'表示无符号短整型(2字节)，'I'表示无符号整型(4字节)
+            header = struct.pack('>HI', self.HEADER_MAGIC, data_length)
             
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON解析错误: {e}")
-            return False, {"error": f"JSON解析错误: {str(e)}"}
-        except UnicodeDecodeError as e:
-            logger.error(f"编码解析错误: {e}")
-            return False, {"error": f"编码解析错误: {str(e)}"}
+            # 组装完整消息
+            packed_data = header + serialized_message
+            
+            return packed_data
+            
         except Exception as e:
-            logger.error(f"消息解析错误: {e}")
-            return False, {"error": f"消息解析错误: {str(e)}"}
+            logger.error(f"消息打包失败: {str(e)}")
+            raise
     
-    def handle_message(self, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def deserialize_message(self, data: bytes) -> Tuple[bool, Dict[str, Any]]:
         """
-        处理消息
+        解析二进制数据为protobuf消息
         
         Args:
-            message: 解析后的消息
+            data: 接收到的二进制数据
             
         Returns:
-            Optional[Dict[str, Any]]: 处理结果
+            (是否成功, 解析出的BaseMessage对象, 剩余数据(JSON数据))
         """
-        command = message.get("command")
+        remaining_data = data
         
-        if command in self.message_handlers:
-            try:
-                handler = self.message_handlers[command]
-                result = handler(message)
-                return result
-            except Exception as e:
-                logger.error(f"处理消息错误: {command}, {e}")
-                return {
-                    "id": message.get("id"),
-                    "type": MessageType.ERROR,
-                    "command": command,
-                    "data": {"error": f"处理消息错误: {str(e)}"}
-                }
-        else:
-            logger.warning(f"未注册的命令: {command}")
-            return {
-                "id": message.get("id"),
-                "type": MessageType.ERROR,
-                "command": command,
-                "data": {"error": f"未知命令: {command}"}
-            }
-    
-    def create_request(self, command: str, data: Dict[str, Any]) -> bytes:
-        """
-        创建请求消息
+        # 检查数据长度，至少需要包含完整的包头(6字节)
+        if len(remaining_data) < 6:
+            return False, None, remaining_data
         
-        Args:
-            command: 命令类型
-            data: 请求数据
+        # 解析包头
+        magic, length = struct.unpack('>HI', remaining_data[:6])
+        
+        # 验证魔数
+        if magic != self.HEADER_MAGIC:
+            logger.error(f"无效的包头魔数: 0x{magic:04X}")
+            # 尝试查找有效的包头
+            pos = remaining_data[1:].find(struct.pack('>H', self.HEADER_MAGIC))
+            if pos >= 0:
+                return False, None, remaining_data[pos+1:]
+            return False, None, b''
+        
+        # 检查是否有足够的数据
+        total_length = 6 + length
+        if len(remaining_data) < total_length:
+            return False, None, remaining_data
+        
+        # 提取消息数据
+        message_data = remaining_data[6:total_length]
+        
+        try:
+            # 解析protobuf消息
+            message = message_pb2.BaseMessage()
+            message.ParseFromString(message_data)
             
-        Returns:
-            bytes: 打包后的请求消息
-        """
-        return self.pack_message(command, MessageType.REQUEST, data)
-    
-    def create_response(self, request_id: str, command: str, data: Dict[str, Any]) -> bytes:
-        """
-        创建响应消息
-        
-        Args:
-            request_id: 对应请求的ID
-            command: 命令类型
-            data: 响应数据
-            
-        Returns:
-            bytes: 打包后的响应消息
-        """
-        return self.pack_message(command, MessageType.RESPONSE, data, request_id)
-    
-    def create_error(self, request_id: str, command: str, error_message: str) -> bytes:
-        """
-        创建错误消息
-        
-        Args:
-            request_id: 对应请求的ID
-            command: 命令类型
-            error_message: 错误消息
-            
-        Returns:
-            bytes: 打包后的错误消息
-        """
-        return self.pack_message(command, MessageType.ERROR, {"error": error_message}, request_id)
-    
-    def create_heartbeat(self) -> bytes:
-        """
-        创建心跳消息
-        
-        Returns:
-            bytes: 打包后的心跳消息
-        """
-        return self.pack_message(CommandType.PING, MessageType.HEARTBEAT, {"status": "alive"})
+            dict_data = {}
+            metadata = {}
+            metadata["sequence_id"] = message.metadata.sequence_id
+            metadata["timestamp"] = message.metadata.timestamp
+            metadata["device_id"] = message.metadata.device_id
+            # metadata["device_name"] = message.metadata.device_name
+            metadata["device_name"] = message.metadata.username
+            metadata["session_id"] = message.metadata.session_id
+            dict_data["msg_id"] = message.msg_id
+            dict_data["metadata"] = metadata
+            if message.HasField("chart_data"):
+                chart_data = {}
+                chart_data["task_id"] = message.chart_data.task_id
+                chart_data["group"] = message.chart_data.group
+                chart_data["chart_name"] = message.chart_data.chart_name
+                chart_data["path"] = message.chart_data.path
+                chart_data["qubit"] = message.chart_data.qubit
+                chart_data["step"] = message.chart_data.step
+                points = []
+                for point in message.chart_data.points:
+                    points.append({
+                        "x": point.x,
+                        "y": point.y
+                    })
+                chart_data["points"] = points
+                dict_data["chart_data"] = chart_data
+            elif message.HasField("json_data"):
+                json_data = json.loads(message.json_data)
+                dict_data["json_data"] = json_data
 
-
-# 创建协议实例
-protocol = Protocol()
+            # 返回解析结果和剩余数据
+            return True, dict_data
+        except Exception as e:
+            logger.error(f"消息解包失败: {str(e)}")
+            return False, {}

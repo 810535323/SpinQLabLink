@@ -2,23 +2,15 @@
 实验相关类定义
 """
 
-import enum
+import json
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, Optional
 import time
-import uuid
+from pydantic import BaseModel
 
-from ..utils.logger import LoggerManager
-from ..connection.client import Client
+from utils import LoggerManager
 
 logger = LoggerManager.get_logger(name='experiment')
-class Pulse:
-    """脉冲类"""
-    def __init__(self, width: int, amp: int, phase: int, detune: int):
-        self.width = width
-        self.amp = amp
-        self.phase = phase
-        self.detune = detune
 
 class Gate:
     """
@@ -38,15 +30,6 @@ class Gate:
         self.qubitIndex = qubitIndex       # The index of the qubit that the gate operates on
         self.timeslot = 0           # The timeslot of the gate in the circuit
         self.type = type            # The type of the gate (e.g., 'X', 'Y', 'Z', 'H', 'CNOT')
-
-class ExperimentStatus(enum.Enum):
-    """实验状态枚举"""
-    CREATED = "created"       # 实验已创建
-    QUEUED = "queued"         # 实验已加入队列
-    RUNNING = "running"       # 实验正在运行
-    COMPLETED = "completed"   # 实验已完成
-    FAILED = "failed"         # 实验失败
-    CANCELED = "canceled"     # 实验已取消
 
 class ExperimentResult:
     """实验结果类"""
@@ -85,19 +68,83 @@ class ExperimentResult:
             "execution_time": self.execution_time
         }
 
+class ExperimentParameter(BaseModel):
+    """实验参数基类"""
+
+
+    def _validate_pulse_json(self, s: str) -> bool:
+        """验证脉冲序列是否合法"""
+        try:
+            j = json.loads(s)
+            # 验证json结构是否包含必要字段
+            if "ppulse" not in j or "hpulse" not in j:
+                raise ValueError("脉冲序列必须包含ppulse和hpulse字段")
+            
+            # 定义有效字段和验证规则
+            valid_keys = ["width", "amp", "phase", "detune"]
+            validation_rules = {
+                "width": {
+                    "type_check": lambda x: isinstance(x, (int)),
+                    "type_error": "必须是整数类型",
+                    "range_check": lambda x: 0 < x <= 2000000,
+                    "range_error": "必须在(0, 2000000]范围内"
+                },
+                "amp": {
+                    "type_check": lambda x: isinstance(x, (int, float)),
+                    "type_error": "必须是数字类型",
+                    "range_check": lambda x: 0 < x <= 100,
+                    "range_error": "必须在(0, 100]范围内"
+                },
+                "phase": {
+                    "type_check": lambda x: isinstance(x, (int, float)),
+                    "type_error": "必须是数字类型",
+                    "range_check": lambda x: True,
+                    "range_error": "无范围限制"
+                },
+                "detune": {
+                    "type_check": lambda x: isinstance(x, (int)),
+                    "type_error": "必须是整数类型",
+                    "range_check": lambda x: -10000 <= x <= 10000,
+                    "range_error": "必须在[-10000, 10000]范围内"
+                }
+            }
+            
+            # 验证ppulse和hpulse字段
+            for pulse_name, pulse_data in [("ppulse", j["ppulse"]), ("hpulse", j["hpulse"])]:
+                # 检查字段是否有效
+                for key in pulse_data:
+                    if key not in valid_keys:
+                        raise ValueError(f"{pulse_name}中包含无效字段: {key}")
+                
+                # 验证每个字段的类型和值范围
+                for key, value in pulse_data.items():
+                    rules = validation_rules[key]
+                    
+                    # 类型检查
+                    if not rules["type_check"](value):
+                        raise TypeError(f"{pulse_name}.{key}{rules['type_error']}，当前为{type(value)}")
+                    
+                    # 范围检查
+                    if not rules["range_check"](value):
+                        raise ValueError(f"{pulse_name}.{key}{rules['range_error']}，当前值为{value}")
+            
+            return True
+        except json.JSONDecodeError:
+            return False
+    class Config:
+        validate_assignment = True
+
 class Experiment(ABC):
     """实验基类"""
-    def __init__(self, parameters: Any = None, connection: Client = None):
-        self.name = f"实验-{uuid.uuid4()[:8]}"
-        self.experiment_type = "base"
-        self.status = ExperimentStatus.CREATED
+    def __init__(self, parameters: Optional[ExperimentParameter] = None):
+        self.experiment_type = ""
+        self.step = 0
         self.created_at = time.time()
         self.started_at = None
         self.completed_at = None
-        self.parameters = parameters or {}
+        self.parameters = parameters
         self.result = ExperimentResult()
         self.metadata = {}
-        self.connection = connection
         
         self._data_callback = None
         self._status_callback = None
@@ -111,12 +158,6 @@ class Experiment(ABC):
             self._data_callback(data)
 
     @abstractmethod
-    def status_update_callback(self, status: ExperimentStatus) -> None:
-        """处理实验状态，实现具体实验类型的状态处理"""
-        if self._status_callback:
-            self._status_callback(status)
-
-    @abstractmethod
     def error_callback(self, error: Exception) -> None:
         """处理实验错误，实现具体实验类型的错误处理"""
         if self._error_callback:
@@ -128,35 +169,6 @@ class Experiment(ABC):
         if self._finish_callback:
             self._finish_callback(result)
 
-    def start(self) -> None:
-        """开始实验"""
-        try:
-            # 运行实验
-            success = self.connection.start_experiment(self.experiment_type, self.parameters)
-            if success:
-                self.status = ExperimentStatus.RUNNING
-                self.started_at = time.time()
-                logger.info(f"开始实验成功: {self.experiment_type}, 参数: {self.parameters}")
-            else:
-                self.status = ExperimentStatus.CANCELED
-                self.result.set_success(False, "实验启动失败")
-                logger.info(f"实验启动失败: {self.experiment_type}, 参数: {self.parameters}")
-        except Exception as e:
-            # 异常处理
-            self.status = ExperimentStatus.FAILED
-            self.result.set_success(False, str(e))
-            raise
-    
-    def cancel(self) -> None:
-        """取消实验"""
-        if self.status in [ExperimentStatus.RUNNING, ExperimentStatus.QUEUED]:
-            self.status = ExperimentStatus.CANCELED
-            self.completed_at = time.time()
-    
-    def get_status(self) -> ExperimentStatus:
-        """获取实验状态"""
-        return self.status
-    
     def get_result(self) -> ExperimentResult:
         """获取实验结果"""
         return self.result
