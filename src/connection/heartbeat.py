@@ -74,7 +74,7 @@ class HeartbeatManager:
         if not self.is_running:
             return
             
-        logger.debug("停止心跳")
+        logger.warn("停止心跳")
         self.is_running = False
         
         # 停止心跳发送定时器
@@ -90,7 +90,6 @@ class HeartbeatManager:
     def on_heartbeat_response(self):
         """处理心跳响应"""
         self.last_heartbeat_response_time = time.time()
-        logger.debug("收到心跳响应")
     
     def _send_heartbeat(self):
         """发送心跳"""

@@ -11,20 +11,10 @@ from connection.connection import TCPConnection
 from utils import LoggerManager
 from connection.protocol import Protocol
 from connection.heartbeat import HeartbeatManager, MSG_HEARTBEAT_RES
-from ExperimentManager import ExperimentManager
 from devices.device import Device
-from utils.experimentType import ExperimentType
-from experiment.experiment_base import Experiment, ExperimentParameter, Gate
-
-# 消息类型定义
-MSG_USER_LOGIN_REQ = "user_login_req"  # 登录
-MSG_USER_LOGIN_RES = "user_login_res"  # 登录响应
-MSG_USER_LOGOUT_REQ = "user_logout_req"  # 登出
-MSG_USER_LOGOUT_RES = "user_logout_res"  # 登出响应
-
-MSG_DEVICE_PARAM_POST = "device_param_post"  # 设备参数
-MSG_LOCK_DATA_UPDATE_POST = "lock_data_update_post"  # 设备锁数据更新
-MSG_DEVICE_INFO_POST = "device_info_post"  # 设备信息
+from utils.types import ExperimentType, MachineType
+from experiment.ExperimentManager import ExperimentManager
+from experiment.experiment_base import Experiment
 
 # 创建logger
 logger = LoggerManager.get_logger(name='spinqlablink')
@@ -36,6 +26,7 @@ class SpinQLabLink:
         self.connection.set_message_callback(self._handle_received_message)
         self.protocol = Protocol()
         self.expMgr = ExperimentManager()
+        self.hardware_connected = False
         self.is_connected = False
         self.logging_in = False
         self.is_logged_in = False
@@ -43,38 +34,125 @@ class SpinQLabLink:
         self.password = password
         self.device_id = str("SpinQLabLink-" + str(uuid.uuid4()).upper()[:8])
         self.session_id = ""
-        self.device_name = ""
         
-        self.device = Device(device_id=self.device_id, device_name=self.device_name, device_type="SpinQLabLink", device_params={})
+        self.device = Device(device_id=self.device_id, device_type="SpinQLabLink", device_params={})
         
         # 心跳管理器
         self.heartbeat_manager = HeartbeatManager(self._send_message)
         self.heartbeat_manager.set_timeout_callback(self._on_heartbeat_timeout)
         
         self.handler_map = {
-            MSG_USER_LOGIN_RES: self._handle_user_login_res,
-            MSG_USER_LOGOUT_RES: self._handle_user_logout_res,
-            MSG_HEARTBEAT_RES: self._handle_heartbeat_res,
-            MSG_DEVICE_PARAM_POST: self._handle_device_param_post,
-            MSG_LOCK_DATA_UPDATE_POST: self._handle_lock_data_update_post,
-            MSG_DEVICE_INFO_POST: self._handle_device_info_post,
+            MachineType.MSG_RES_USER_LOGIN: self._handle_user_login_res,
+            MachineType.MSG_RES_USER_LOGOUT: self._handle_user_logout_res,
+            MachineType.MSG_RES_HEARTBEAT: self._handle_heartbeat_res,
+            MachineType.MSG_POST_PARAM: self._handle_device_param_post,
+            MachineType.MSG_POST_LOCK_DATA: self._handle_lock_data_update_post,
+            MachineType.MSG_POST_INFO: self._handle_device_info_post,
+            MachineType.MSG_POST_SAMPLE_CALIBRATION: self._handle_sample_calibration_post,
+            MachineType.MSG_POST_EXP_QUEUE_UPDATE: self._handle_exp_queue_update_post
         }
+
+        self.exp_handler_map = {}
+
+    def _send_message(self, msg_id: str, data: dict):
+        serialized_message = self.protocol.serialize_message(msg_id, self._pack_metadata(), data)
+        self.connection.send(serialized_message)
+
+    def _handle_received_message(self, data: bytes):
+        success, dict_data = self.protocol.deserialize_message(data)
+        if not success: # 消息不完全，等待下次处理
+            return
+        
+        handler = self.handler_map.get(dict_data["msg_id"])
+        if handler:
+            handler(dict_data["json_data"])
+        else:
+            handler = self.exp_handler_map.get(dict_data["msg_id"])
+            if handler:
+                if "json_data" in dict_data and dict_data["json_data"]:
+                    handler(dict_data["json_data"])
+                elif "chart_data" in dict_data and dict_data["chart_data"]:
+                    handler(dict_data["chart_data"])
+            else:
+                logger.error(f"未找到消息处理函数: {dict_data['msg_id']}")
+
+    def _handle_user_login_res(self, data: Dict[str, Any]):
+        logger.info(f"登录响应: {data}")
+        if data["code"] == 0:
+            if data["sessionId"]:
+                self.session_id = data["sessionId"]
+                self.is_logged_in = True
+                self.heartbeat_manager.start()
+            else:
+                logger.error("登录失败，sessionId为空")
+        else:
+            logger.error(f"登录失败，错误码: {data['json_data']['code']}, 错误信息: {data['json_data']['message']}")
+
+    def _handle_user_logout_res(self, data: Dict[str, Any]):
+        logger.info(f"登出响应: {data}")
+        self.is_logged_in = False
+        
+        # 登出时停止心跳
+        self.heartbeat_manager.stop()
+
+    def _handle_heartbeat_res(self, data: Dict[str, Any]):
+        # 通知心跳管理器收到响应
+        self.heartbeat_manager.on_heartbeat_response()
+
+    def _handle_device_param_post(self, data: Dict[str, Any]):
+        logger.info(f"设备参数: {data}")
+        self.device.set_device_params(data)
+
+    def _handle_lock_data_update_post(self, data: Dict[str, Any]):
+        logger.info(f"设备锁数据更新: {data}")
+        self.device.set_lock_data_post(data)
+
+    def _handle_device_info_post(self, data: Dict[str, Any]):
+        logger.info(f"设备信息: {data}")
+        if data["connected"]:
+            self.hardware_connected = data["connected"]
+
+    def _handle_sample_calibration_post(self, data: Dict[str, Any]):
+        logger.info(f"样本校准: {data}")
+
+    def _handle_exp_queue_update_post(self, data: Dict[str, Any]):
+        logger.info(f"实验队列更新: {data}")
+        for i, queue in enumerate(data["queue"]):
+            if queue["id"] == self.expMgr.current_experiment.id:
+                if i != 0:
+                    logger.info(f"实验正在队列等待中...前面还有{i}个实验")
+
+    def _on_heartbeat_timeout(self):
+        """心跳超时回调"""
+        logger.error("心跳超时，断开连接")
+        # 断开连接
+        self.is_connected = False
+        self.is_logged_in = False
+        self.connection.disconnect()
+
+    def _pack_metadata(self) -> Dict[str, Any]:
+        metadata = {}
+        metadata["sequence_id"] = int(time.time() * 1000)
+        metadata["timestamp"] = int(time.time() * 1000)
+        metadata["account"] = self.account
+        metadata["session_id"] = self.session_id
+        return metadata
 
     def connect(self):
         if self.connection.connect():
             self.is_connected = True
-            self.login()
+            self._login()
         else:
             return False
     
-    def login(self):
+    def _login(self):
         if not self.is_connected:
             logger.error("未连接，无法登录")
             return
         
         self.logging_in = True
         
-        serialized_message = self.protocol.serialize_message(MSG_USER_LOGIN_REQ, self.__pack_metadata(), {
+        serialized_message = self.protocol.serialize_message(MachineType.MSG_REQ_USER_LOGIN, self._pack_metadata(), {
             "account": self.account,
             "password": self.password
         })
@@ -86,7 +164,7 @@ class SpinQLabLink:
             logger.error("未连接，无法登出")
             return
         
-        serialized_message = self.protocol.serialize_message(MSG_USER_LOGOUT_REQ, self.__pack_metadata(), {})
+        serialized_message = self.protocol.serialize_message(MachineType.MSG_REQ_USER_LOGOUT, self._pack_metadata(), {})
         self.connection.send(serialized_message)
         
         # 停止心跳
@@ -117,60 +195,6 @@ class SpinQLabLink:
         else:
             return False
 
-    def _send_message(self, msg_id: str, data: dict):
-        serialized_message = self.protocol.serialize_message(msg_id, self.__pack_metadata(), data)
-        self.connection.send(serialized_message)
-
-    def _handle_received_message(self, data: bytes):
-        success, dict_data = self.protocol.deserialize_message(data)
-        if not success:
-            logger.error(f"消息解包失败: {data}")
-            return
-        
-        handler = self.handler_map.get(dict_data["msg_id"])
-        if handler:
-            handler(dict_data)
-        else:
-            logger.error(f"未找到消息处理函数: {dict_data['msg_id']}")
-
-    def _handle_user_login_res(self, data: Dict[str, Any]):
-        logger.info(f"登录响应: {data}")
-        if data["json_data"]["code"] == 0 and data["json_data"]["sessionId"]:
-            self.session_id = data["json_data"]["sessionId"]
-            self.device_name = self.account
-            self.is_logged_in = True
-            self.heartbeat_manager.start()
-
-    def _handle_user_logout_res(self, data: Dict[str, Any]):
-        logger.info(f"登出响应: {data}")
-        self.is_logged_in = False
-        
-        # 登出时停止心跳
-        self.heartbeat_manager.stop()
-
-    def _handle_heartbeat_res(self, data: Dict[str, Any]):
-        # 通知心跳管理器收到响应
-        self.heartbeat_manager.on_heartbeat_response()
-
-    def _handle_device_param_post(self, data: Dict[str, Any]):
-        logger.info(f"设备参数: {data}")
-        self.device.set_device_params(data["json_data"])
-
-    def _handle_lock_data_update_post(self, data: Dict[str, Any]):
-        logger.info(f"设备锁数据更新: {data}")
-        self.device.set_lock_data_post(data["json_data"])
-
-    def _handle_device_info_post(self, data: Dict[str, Any]):
-        logger.info(f"设备信息: {data}")
-
-    def _on_heartbeat_timeout(self):
-        """心跳超时回调"""
-        logger.error("心跳超时，断开连接")
-        # 断开连接
-        self.is_connected = False
-        self.is_logged_in = False
-        self.connection.disconnect()
-
     def get_connection(self):
         return self.is_connected
     
@@ -178,56 +202,19 @@ class SpinQLabLink:
         return self.expMgr
     
     def register_experiment(self, experiment_type: ExperimentType):
-        return self.expMgr.register_experiment(experiment_type)
+        return self.expMgr.register_experiment(experiment_type, self.exp_handler_map)
     
     def get_experiment_status(self):
         return self.expMgr.get_experiment_status()
-    
     def get_experiment_result(self):
         return self.expMgr.get_experiment_result()
 
-    def run_experiment(self, Experiment: Experiment):
-        return self.expMgr.run_experiment(Experiment)
+    def run_experiment(self):
+        para = self.expMgr.get_experiment_parameter()
+        para["deviceId"] = self.device_id
+        para["account"] = self.account
+        print("发送实验参数: ", para)
+        self._send_message(MachineType.MSG_REQ_ADD_EXP_TASK_REQ, para)
 
-    def wait_for_experiment_completion(self, Experiment: Experiment):
-        return self.expMgr.wait_for_experiment_completion(Experiment)
-    
-    def __pack_metadata(self) -> Dict[str, Any]:
-        metadata = {}
-        metadata["sequence_id"] = int(time.time() * 1000)
-        metadata["timestamp"] = int(time.time() * 1000)
-        metadata["device_id"] = self.device_id
-        metadata["device_name"] = self.device_name
-        metadata["session_id"] = self.session_id
-        return metadata
-
-def main():
-    spinqlablink = SpinQLabLink("192.168.9.144", 8181, "anyword", "anyword")
-    spinqlablink.connect()
-
-    if not spinqlablink.wait_for_login():
-        logger.error("登录失败")
-        return
-    
-    # 注册 NMR 实验
-    nmr, nmr_para = spinqlablink.register_experiment(ExperimentType.NMR_PHENOMENON_AND_SIGNAL)
-    
-    # 设置磷脉冲序列
-    import json
-    nmr_para.set_pulse(json.dumps({"hpulse":{"width": 100, "amp": 100, "phase": 0, "detune": 0},
-                                    "ppulse":{"width": 100, "amp": 100, "phase": 0, "detune": 0}}))
-    
-    # 设置其他参数
-    nmr_para.h_freq = 27.5  # 氢共振频率 (MHz)
-    nmr_para.p_freq = 11.2  # 磷共振频率 (MHz)
-    nmr_para.makePps = True  # 生成 PPS 信号
-    nmr_para.samplePath = 0  # 采样路径：0=氢通道，1=磷通道
-    nmr_para.custom_freq = True  # 使用自定义频率
-    
-    print(nmr_para.to_dict())
-          
-    time.sleep(1)
-    spinqlablink.disconnect()
-
-if __name__ == "__main__":
-    main()
+    def wait_for_experiment_completion(self):
+        return self.expMgr.wait_for_experiment_completion()

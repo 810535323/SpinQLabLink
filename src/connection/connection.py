@@ -96,7 +96,7 @@ class TCPConnection:
             finally:
                 self.socket = None
                 self.connected = False
-                logger.info("已断开连接")
+                logger.warn("已断开连接")
         
         # 清空队列
         self._clear_queues()
@@ -200,7 +200,6 @@ class TCPConnection:
                         
                         # 将新接收的数据添加到缓冲区
                         buffer += data
-                        logger.debug(f"缓冲区数据: {len(buffer)}字节")
 
                         # 尝试从缓冲区解析完整消息
                         while buffer:

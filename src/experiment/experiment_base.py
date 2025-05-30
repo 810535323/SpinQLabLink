@@ -7,9 +7,10 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import time
 from pydantic import BaseModel
+import uuid
 
 from utils import LoggerManager
-
+from utils.types import MachineType, ExperimentState
 logger = LoggerManager.get_logger(name='experiment')
 
 class Gate:
@@ -33,44 +34,31 @@ class Gate:
 
 class ExperimentResult:
     """实验结果类"""
-    
     def __init__(self):
-        self.data = {}
-        self.plots = []
-        self.raw_data = {}
-        self.metadata = {}
-        self.success = False
-        self.error_message = ""
-        self.execution_time = 0
-    
-    def add_data(self, key: str, value: Any) -> None:
-        """添加数据"""
-        self.data[key] = value
-    
-    def add_plot(self, name: str, plot_data: Dict[str, Any]) -> None:
-        """添加图表数据"""
-        self.plots[name] = plot_data
-    
-    def set_success(self, success: bool, message: str = "") -> None:
-        """设置执行状态"""
-        self.success = success
-        self.error_message = message
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
-        return {
-            "data": self.data,
-            "plots": self.plots,
-            "raw_data": self.raw_data,
-            "metadata": self.metadata,
-            "success": self.success,
-            "error_message": self.error_message,
-            "execution_time": self.execution_time
-        }
+        pass
+
+    @abstractmethod
+    def append_graph(self, lines: Dict[str, Any]):
+        """Append Line Graph"""
+        pass
+
+    @abstractmethod
+    def get_result(self) -> Dict[str, Any]:
+        """获取实验结果"""
+        """
+        获取实验结果的抽象方法，所有实验子类必须实现此方法。
+        此方法应返回包含所有实验结果的字典，用于实验执行。
+        
+        Returns:
+            Dict[str, Any]: 包含实验参数的字典
+        
+        Raises:
+            NotImplementedError: 如果子类未实现此方法
+        """
+        raise NotImplementedError("必须在子类中实现get_result方法")
 
 class ExperimentParameter(BaseModel):
     """实验参数基类"""
-
 
     def _validate_pulse_json(self, s: str) -> bool:
         """验证脉冲序列是否合法"""
@@ -86,14 +74,14 @@ class ExperimentParameter(BaseModel):
                 "width": {
                     "type_check": lambda x: isinstance(x, (int)),
                     "type_error": "必须是整数类型",
-                    "range_check": lambda x: 0 < x <= 2000000,
-                    "range_error": "必须在(0, 2000000]范围内"
+                    "range_check": lambda x: 0 <= x <= 2000000,
+                    "range_error": "必须在[0, 2000000]范围内"
                 },
                 "amp": {
                     "type_check": lambda x: isinstance(x, (int, float)),
                     "type_error": "必须是数字类型",
-                    "range_check": lambda x: 0 < x <= 100,
-                    "range_error": "必须在(0, 100]范围内"
+                    "range_check": lambda x: 0 <= x <= 100,
+                    "range_error": "必须在[0, 100]范围内"
                 },
                 "phase": {
                     "type_check": lambda x: isinstance(x, (int, float)),
@@ -131,6 +119,22 @@ class ExperimentParameter(BaseModel):
             return True
         except json.JSONDecodeError:
             return False
+        
+    @abstractmethod
+    def get_parameters(self) -> Dict[str, Any]:
+        """获取实验参数"""
+        """
+        获取实验参数的抽象方法，所有实验子类必须实现此方法。
+        此方法应返回包含所有实验参数的字典，用于实验执行。
+        
+        Returns:
+            Dict[str, Any]: 包含实验参数的字典
+        
+        Raises:
+            NotImplementedError: 如果子类未实现此方法
+        """
+        raise NotImplementedError("必须在子类中实现get_parameters方法")
+    
     class Config:
         validate_assignment = True
 
@@ -138,56 +142,96 @@ class Experiment(ABC):
     """实验基类"""
     def __init__(self, parameters: Optional[ExperimentParameter] = None):
         self.experiment_type = ""
-        self.step = 0
-        self.created_at = time.time()
+        self.id = str(uuid.uuid4())
+        self.name = ""
+        self.step = ""
+        self.state = "PENDING"
+        self.created_at = int(time.time() * 1000)  # 转换为毫秒级时间戳
         self.started_at = None
         self.completed_at = None
         self.parameters = parameters
+        self.graph_data = []
         self.result = ExperimentResult()
-        self.metadata = {}
-        
-        self._data_callback = None
-        self._status_callback = None
-        self._error_callback = None
-        self._finish_callback = None
+
+    def register_handler(self, handler_map: dict) -> None:
+        """注册消息处理函数"""
+        handler_map[MachineType.MSG_RES_ADD_EXP_TASK_RES] = self.handle_exp_added
+        handler_map[MachineType.MSG_POST_EXP_STARTED] = self.handle_exp_started
+        handler_map[MachineType.MSG_POST_EXP_TERMINATED] = self.handle_exp_terminated
+        handler_map[MachineType.MSG_POST_EXP_REMOVED] = self.handle_exp_removed
+        handler_map[MachineType.MSG_POST_EXP_STEP_CHANGED] = self.handle_exp_step_changed
+        handler_map[MachineType.MSG_POST_EXP_DATA_UPDATED] = self.handle_exp_data_updated
+        handler_map[MachineType.MSG_POST_EXP_CHART_UPDATED_STARTED] = self.handle_exp_chart_data_updated_started
+        handler_map[MachineType.MSG_POST_EXP_CHART_UPDATED] = self.handle_exp_chart_data_updated
+        handler_map[MachineType.MSG_POST_EXP_CHART_UPDATED_FINISHED] = self.handle_exp_chart_data_updated_finished
+        handler_map[MachineType.MSG_POST_EXP_FINISHED] = self.handle_exp_finished
     
     @abstractmethod
-    def data_update_callback(self, data: Dict[str, Any]) -> None:
-        """处理实验数据，实现具体实验类型的数据处理"""
-        if self._data_callback:
-            self._data_callback(data)
+    def handle_exp_added(self, data: Dict[str, Any]) -> None:
+        """处理实验队列更新"""
+        raise NotImplementedError("必须在子类中实现handle_exp_added方法")
+    
+    @abstractmethod
+    def get_experiment_parameter(self) -> Dict[str, Any]:
+        """获取实验参数"""
+        raise NotImplementedError("必须在子类中实现get_experiment_parameter方法")
 
     @abstractmethod
-    def error_callback(self, error: Exception) -> None:
-        """处理实验错误，实现具体实验类型的错误处理"""
-        if self._error_callback:
-            self._error_callback(error)
+    def handle_exp_added(self, data: Dict[str, Any]) -> None:
+        """处理实验添加，实现具体实验类型的添加处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_added方法")
     
     @abstractmethod
-    def finish_callback(self, result: ExperimentResult) -> None:
+    def handle_exp_started(self) -> None:
+        """处理实验开始，实现具体实验类型的开始处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_started方法")
+    
+    @abstractmethod
+    def handle_exp_terminated(self) -> None:
         """处理实验结束，实现具体实验类型的结束处理"""
-        if self._finish_callback:
-            self._finish_callback(result)
+        raise NotImplementedError("必须在子类中实现handle_exp_terminated方法")
+    
+    @abstractmethod
+    def handle_exp_removed(self) -> None:
+        """处理实验移除，实现具体实验类型的移除处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_removed方法")
+    
+    @abstractmethod
+    def handle_exp_step_changed(self, step: int) -> None:
+        """处理实验步骤变化，实现具体实验类型的步骤变化处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_step_changed方法")
+    
+    @abstractmethod
+    def handle_exp_data_updated(self, data: Dict[str, Any]) -> None:
+        """处理实验数据更新，实现具体实验类型的数据更新处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_data_updated方法")
+    
+    @abstractmethod
+    def handle_exp_chart_data_updated_started(self, data: Dict[str, Any]) -> None:
+        """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_chart_data_updated_started方法")
+    
+    @abstractmethod
+    def handle_exp_chart_data_updated(self, data: Dict[str, Any]) -> None:
+        """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_chart_data_updated方法")
+    @abstractmethod
+    def handle_exp_chart_data_updated_finished(self, data: Dict[str, Any]) -> None:
+        """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_chart_data_updated_finished方法")
 
+    @abstractmethod
+    def handle_exp_finished(self, data: Dict[str, Any]) -> None:
+        """处理实验结束，实现具体实验类型的结束处理"""
+        raise NotImplementedError("必须在子类中实现handle_exp_finished方法")
+
+    @abstractmethod
+    def get_status(self) -> ExperimentState:
+        """获取实验状态"""
+        raise NotImplementedError("必须在子类中实现get_status方法")
+
+    @abstractmethod
     def get_result(self) -> ExperimentResult:
         """获取实验结果"""
-        return self.result
+        raise NotImplementedError("必须在子类中实现get_result方法")
     
-    def get_type(self) -> str:
-        """获取实验类型"""
-        return self.experiment_type
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
-        return {
-            "id": self.id,
-            "name": self.name,
-            "experiment_type": self.experiment_type,
-            "status": self.status.value,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-            "parameters": self.parameters,
-            "metadata": self.metadata,
-            "execution_time": self.result.execution_time if self.finished_at else 0,
-        }

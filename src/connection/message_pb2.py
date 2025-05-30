@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rmessage.proto\"\x81\x01\n\x0b\x42\x61seMessage\x12\x1b\n\x08metadata\x18\x01 \x01(\x0b\x32\t.Metadata\x12\x0e\n\x06msg_id\x18\x02 \x01(\t\x12 \n\nchart_data\x18! \x01(\x0b\x32\n.ChartDataH\x00\x12\x13\n\tjson_data\x18, \x01(\tH\x00\x42\x0e\n\x0cmessage_type\"k\n\x08Metadata\x12\x13\n\x0bsequence_id\x18\x01 \x01(\x03\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x11\n\tdevice_id\x18\x03 \x01(\t\x12\x10\n\x08username\x18\x04 \x01(\t\x12\x12\n\nsession_id\x18\x05 \x01(\t\"\xb6\x01\n\tChartData\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\r\n\x05group\x18\x02 \x01(\t\x12\x12\n\nchart_name\x18\x03 \x01(\t\x12\x11\n\x04path\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x12\n\x05qubit\x18\x05 \x01(\tH\x01\x88\x01\x01\x12\x11\n\x04step\x18\x06 \x01(\tH\x02\x88\x01\x01\x12\x1f\n\x06points\x18\x07 \x03(\x0b\x32\x0f.DataPointProtoB\x07\n\x05_pathB\x08\n\x06_qubitB\x07\n\x05_step\"&\n\x0e\x44\x61taPointProto\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rmessage.proto\"\x81\x01\n\x0b\x42\x61seMessage\x12\x1b\n\x08metadata\x18\x01 \x01(\x0b\x32\t.Metadata\x12\x0e\n\x06msg_id\x18\x02 \x01(\t\x12 \n\nchart_data\x18! \x01(\x0b\x32\n.ChartDataH\x00\x12\x13\n\tjson_data\x18, \x01(\tH\x00\x42\x0e\n\x0cmessage_type\"W\n\x08Metadata\x12\x13\n\x0bsequence_id\x18\x01 \x01(\x03\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x0f\n\x07\x61\x63\x63ount\x18\x04 \x01(\t\x12\x12\n\nsession_id\x18\x05 \x01(\t\"\xb6\x01\n\tChartData\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\r\n\x05group\x18\x02 \x01(\t\x12\x12\n\nchart_name\x18\x03 \x01(\t\x12\x11\n\x04path\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x12\n\x05qubit\x18\x05 \x01(\tH\x01\x88\x01\x01\x12\x11\n\x04step\x18\x06 \x01(\tH\x02\x88\x01\x01\x12\x1f\n\x06points\x18\x07 \x03(\x0b\x32\x0f.DataPointProtoB\x07\n\x05_pathB\x08\n\x06_qubitB\x07\n\x05_step\"&\n\x0e\x44\x61taPointProto\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,9 +34,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_BASEMESSAGE']._serialized_start=18
   _globals['_BASEMESSAGE']._serialized_end=147
   _globals['_METADATA']._serialized_start=149
-  _globals['_METADATA']._serialized_end=256
-  _globals['_CHARTDATA']._serialized_start=259
-  _globals['_CHARTDATA']._serialized_end=441
-  _globals['_DATAPOINTPROTO']._serialized_start=443
-  _globals['_DATAPOINTPROTO']._serialized_end=481
+  _globals['_METADATA']._serialized_end=236
+  _globals['_CHARTDATA']._serialized_start=239
+  _globals['_CHARTDATA']._serialized_end=421
+  _globals['_DATAPOINTPROTO']._serialized_start=423
+  _globals['_DATAPOINTPROTO']._serialized_end=461
 # @@protoc_insertion_point(module_scope)

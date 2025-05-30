@@ -27,9 +27,9 @@ class LoggerManager:
     _loggers = {}
     
     @classmethod
-    def get_logger(cls, name='spinq', level='info', 
+    def get_logger(cls, name='spinq', level='debug', 
                   log_file=None, max_size=10*1024*1024, backup_count=5,
-                  log_format='%(asctime)s[%(name)s][%(levelname)s]%(message)s'):
+                  log_format='%(asctime)s [%(filename)s:%(lineno)d] [%(funcName)s] [%(levelname)s] %(message)s'):
         """
         获取日志器实例
         

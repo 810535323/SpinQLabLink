@@ -10,9 +10,8 @@ class Device:
 
     负责保存设备参数
     """
-    def __init__(self, device_id: str, device_name: str, device_type: str, device_params: dict):
+    def __init__(self, device_id: str, device_type: str, device_params: dict):
         self.device_id = device_id
-        self.device_name = device_name
         self.device_type = device_type
         self.device_params = device_params
 
