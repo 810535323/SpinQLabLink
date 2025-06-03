@@ -30,7 +30,6 @@ class MachineType():
     MSG_POST_SAMPLE_CALIBRATION = "s_post_sample_calibration_data"  # 样品校准
     MSG_POST_EXP_QUEUE_UPDATE = "s_post_exp_queue_update"  # 实验队列更新
 
-
 class ExperimentType():
     NMR_PHENOMENON_AND_SIGNAL = "EXP_PULSE"
     RABI_OSCILLATIONS = "EXP_RABI"

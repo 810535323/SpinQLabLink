@@ -1,0 +1,76 @@
+{
+  "description": {
+    "TITLE": "Gemini_Q1_X90.spinq",
+    "OWNER": "Zidong Lin",
+    "DATE": "09-Sep-2024",
+    "FIDELITY": "9.998651e-01",
+    "TOTALPULSEWIDTH": "3.322600e-04",
+    "SLICES": "5"
+  },
+  "pulse": {
+    "channel1_pulse": [
+      {
+        "detuning": 0,
+        "phase": 73.94,
+        "amplitude": 100,
+        "width": 46.14
+      },
+      {
+        "detuning": 0,
+        "phase": 118.1693,
+        "amplitude": 100,
+        "width": 79.8
+      },
+      {
+        "detuning": 0,
+        "phase": 298.0712,
+        "amplitude": 100,
+        "width": 159.56
+      },
+      {
+        "detuning": 0,
+        "phase": 75.4388,
+        "amplitude": 100,
+        "width": 46.76
+      },
+      {
+        "detuning": 0,
+        "phase": 360.5371,
+        "amplitude": 100,
+        "width": 0
+      }
+    ],
+    "channel2_pulse": [
+      {
+        "detuning": 0,
+        "phase": 0,
+        "amplitude": 0,
+        "width": 46.14
+      },
+      {
+        "detuning": 0,
+        "phase": 0,
+        "amplitude": 0,
+        "width": 79.8
+      },
+      {
+        "detuning": 0,
+        "phase": 0,
+        "amplitude": 0,
+        "width": 159.56
+      },
+      {
+        "detuning": 0,
+        "phase": 0,
+        "amplitude": 0,
+        "width": 46.76
+      },
+      {
+        "detuning": 0,
+        "phase": 0,
+        "amplitude": 0,
+        "width": 0
+      }
+    ]
+  }
+}

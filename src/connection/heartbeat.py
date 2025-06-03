@@ -1,7 +1,7 @@
 """
-心跳管理模块
+心跳管理器
 
-负责管理客户端与服务器之间的心跳连接
+用于管理与服务器的心跳连接
 """
 
 import time
@@ -39,7 +39,7 @@ class HeartbeatManager:
         self.heartbeat_checking_timer: Optional[threading.Timer] = None
         
         # 状态
-        self.is_running = False
+        self._is_running = False
         
         # 回调函数
         self.on_timeout_callback: Optional[Callable[[], None]] = None
@@ -54,12 +54,12 @@ class HeartbeatManager:
         self.on_timeout_callback = callback
     
     def start(self):
-        """开启心跳"""
-        if self.is_running:
-            logger.warning("心跳已经在运行中")
+        """启动心跳"""
+        if self._is_running:
+            logger.warning("Heartbeat is already running")
             return
-            
-        logger.debug("开启心跳")
+        
+        logger.debug("Starting heartbeat")
         self.is_running = True
         self.last_heartbeat_response_time = time.time()
         
@@ -71,11 +71,13 @@ class HeartbeatManager:
     
     def stop(self):
         """停止心跳"""
-        if not self.is_running:
+        if not self._is_running:
             return
-            
-        logger.warn("停止心跳")
-        self.is_running = False
+        
+        logger.warn("Stopping heartbeat")
+        
+        # 设置停止标志
+        self._is_running = False
         
         # 停止心跳发送定时器
         if self.heartbeat_timer:
@@ -93,16 +95,14 @@ class HeartbeatManager:
     
     def _send_heartbeat(self):
         """发送心跳"""
-        if not self.is_running:
-            logger.debug("心跳已停止，不再发送")
+        if not self._is_running:
+            logger.warn("Heartbeat stopped, not sending")
             return
-            
+        
         try:
             self.send_message_callback(MSG_HEARTBEAT_REQ, {})
-            logger.debug("发送心跳请求")
         except Exception as e:
-            logger.error(f"发送心跳失败: {e}")
-        
+            logger.error(f"Failed to send heartbeat: {e}")
         # 设置下一次心跳发送
         if self.is_running:
             self.heartbeat_timer = threading.Timer(HEARTBEAT_INTERVAL, self._send_heartbeat)
@@ -111,8 +111,8 @@ class HeartbeatManager:
     
     def _check_heartbeat_timeout(self):
         """检查心跳超时"""
-        if not self.is_running:
-            logger.debug("心跳已停止，不再检查超时")
+        if not self._is_running:
+            logger.debug("Heartbeat is not running, not checking timeout")
             return
             
         current_time = time.time()
@@ -146,7 +146,7 @@ class HeartbeatManager:
         elapsed_time = current_time - self.last_heartbeat_response_time if self.last_heartbeat_response_time > 0 else 0
         
         return {
-            "is_running": self.is_running,
+            "is_running": self._is_running,
             "last_response_time": self.last_heartbeat_response_time,
             "elapsed_time": elapsed_time,
             "timeout_threshold": HEARTBEAT_TIMEOUT,

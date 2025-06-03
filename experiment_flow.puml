@@ -23,114 +23,205 @@ skinparam SequenceGroupBorderColor #95A5A6
 
 title 实验通信框架业务流程图
 
-participant "实验客户端程序" as Client
-participant "设备管理器" as DeviceManager
-participant "实验管理器" as ExperimentManager
-participant "实验实例" as Experiment
-participant "实验参数" as ExperimentParameter
-participant "实验结果" as ExperimentResult
-participant "TCP网络连接" as Connection
-participant "主机服务器" as Server
+participant "客户端应用" as Client
+participant "SpinQLabLink" as LabLink
+participant "设备管理器\nDevice" as Device
+participant "TCP连接\nTCPConnection" as TCPConnection
+participant "协议处理\nProtocol" as Protocol
+participant "实验管理器\nExperimentManager" as ExperimentManager
+participant "实验实例\nExperiment" as Experiment
+participant "服务器" as Server
+participant "心跳管理器\nHeartbeatManager" as Heartbeat
 
-== 初始化阶段 ==
+== 初始化与连接阶段 ==
 
-Client -> DeviceManager: 创建设备管理器
-activate DeviceManager
+Client -> LabLink: 创建SpinQLabLink(host, port, account, password)
+activate LabLink
 
-DeviceManager->Connection: 创建TCP网络连接
-activate Connection
-Connection -> Server: 建立TCP连接
-activate Server
-Server --> Connection: 连接成功
-Connection --> DeviceManager: 连接成功并返回设备参数
-DeviceManager -> DeviceManager: 解析并保存设备参数
-
-DeviceManager -> ExperimentManager: 创建实验管理器
+LabLink -> TCPConnection: 创建TCP连接(host, port)
+activate TCPConnection
+LabLink -> Protocol: 创建协议处理器
+activate Protocol
+LabLink -> Device: 创建设备实例(device_id)
+activate Device
+LabLink -> ExperimentManager: 创建实验管理器()
 activate ExperimentManager
+LabLink -> Heartbeat: 创建心跳管理器
+activate Heartbeat
 
-par 并行接收设备参数
-    Server -> Connection: 发送设备参数
-    Connection -> DeviceManager: 接收设备参数
-    DeviceManager -> DeviceManager: 解析并保存设备参数
-end
+Client -> LabLink: connect()
+LabLink -> TCPConnection: connect()
+TCPConnection -> Server: 建立TCP连接
+activate Server
+Server --> TCPConnection: 连接成功
+TCPConnection --> LabLink: 返回连接结果
 
-== 实验初始化阶段 ==
+LabLink -> Protocol: 序列化登录消息
+Protocol --> LabLink: 返回序列化后的消息
+LabLink -> TCPConnection: 发送登录请求
+TCPConnection -> Server: 发送登录消息
+Server --> TCPConnection: 返回登录响应
+TCPConnection -> LabLink: 接收登录响应
+LabLink -> Protocol: 反序列化消息
+Protocol --> LabLink: 返回消息内容
+LabLink -> LabLink: 处理登录响应
 
-Client -> ExperimentManager: 请求注册实验实例
-Client -> ExperimentManager: 请求注册实验参数
+LabLink -> Heartbeat: 启动心跳
+Heartbeat -> TCPConnection: 定期发送心跳包
+TCPConnection -> Server: 心跳消息
+Server --> TCPConnection: 心跳响应
+TCPConnection --> Heartbeat: 接收心跳响应
 
-ExperimentManager -> Experiment: 创建实验实例
-ExperimentManager -> ExperimentParameter: 创建实验参数并输入参数
-ExperimentParameter -> ExperimentParameter: 校验参数是否合法
-ExperimentParameter -> Experiment: 设置实验参数
+note right of Server
+  服务器发送设备参数
+end note
 
-Client -> ExperimentManager: 请求开始实验并阻塞命令窗口
+Server -> TCPConnection: 发送设备参数
+TCPConnection -> LabLink: 接收设备参数
+LabLink -> Protocol: 反序列化设备参数
+Protocol --> LabLink: 返回设备参数内容
+LabLink -> Device: 设置设备参数
+Device --> LabLink: 更新完成
+
+== 实验注册与参数设置阶段 ==
+
+Client -> LabLink: register_experiment(experimentType)
+LabLink -> ExperimentManager: register_experiment(experimentType, handler_map)
+ExperimentManager -> ExperimentManager: 动态加载实验类
+ExperimentManager -> Experiment: 创建实验实例和参数
+activate Experiment
+Experiment -> Experiment: 注册消息处理函数到handler_map
+Experiment --> ExperimentManager: 返回实验实例
+ExperimentManager --> LabLink: 返回实验实例和参数
+LabLink --> Client: 返回实验实例和参数
+
+Client -> Experiment: 设置实验参数
+Experiment --> Client: 参数设置完成
 
 == 实验执行阶段 ==
 
-Experiment -> ExperimentManager: 提取实验json数据
-ExperimentManager -> DeviceManager: 发送实验参数
-DeviceManager -> Connection: 发送参数数据
-Connection -> Server: 发送参数数据
+Client -> LabLink: run_experiment()
+LabLink -> ExperimentManager: get_experiment_parameter()
+ExperimentManager -> Experiment: get_experiment_parameter()
+Experiment --> ExperimentManager: 返回实验参数
+ExperimentManager --> LabLink: 返回实验参数
+
+LabLink -> Protocol: 序列化实验参数
+Protocol --> LabLink: 返回序列化后的消息
+LabLink -> TCPConnection: 发送实验参数
+TCPConnection -> Server: 发送实验参数
 
 note right of Server
-  服务器开始实验
+  服务器开始处理实验
 end note
 
-Server --> Connection: 确认接收
-Connection -> DeviceManager: 转发实验数据
-DeviceManager -> ExperimentManager: 转发实验数据
-ExperimentManager -> Experiment: 转发实验数据
-Experiment -> Experiment: 等待数据
+Server -> TCPConnection: 发送实验已添加响应
+TCPConnection -> LabLink: 接收响应
+LabLink -> Protocol: 反序列化响应
+Protocol --> LabLink: 返回消息内容
+LabLink -> Experiment: handle_exp_added(data)
+Experiment -> Experiment: 处理实验添加响应
 
-loop 多个实验步骤
-    Server -> Server: 处理单步数据完成
+Server -> TCPConnection: 发送实验开始通知
+TCPConnection -> LabLink: 接收通知
+LabLink -> Protocol: 反序列化通知
+Protocol --> LabLink: 返回消息内容
+LabLink -> Experiment: handle_exp_started(data)
+Experiment -> Experiment: 更新实验状态为运行中
 
-    Server -> Connection: 返回单步数据
-    Connection -> DeviceManager: 接收单步实验数据
-    DeviceManager -> DeviceManager: 解析数据
-
-    alt 设备数据
-        DeviceManager -> DeviceManager: 保存设备数据
-    else 实验数据
-        DeviceManager -> ExperimentManager: 转发实验数据
-    end
-
-    ExperimentManager -> Experiment: 获取实验数据并处理
-    Experiment -> Experiment: 处理单个步骤信息
-    Experiment -> Experiment: 等待下一个步骤
+loop 实验步骤执行
+    Server -> TCPConnection: 发送步骤变更通知
+    TCPConnection -> LabLink: 接收通知
+    LabLink -> Protocol: 反序列化通知
+    Protocol --> LabLink: 返回消息内容
+    LabLink -> Experiment: handle_exp_step_changed(step)
+    Experiment -> Experiment: 更新当前步骤
+    
+    Server -> TCPConnection: 发送实验数据更新
+    TCPConnection -> LabLink: 接收数据
+    LabLink -> Protocol: 反序列化数据
+    Protocol --> LabLink: 返回消息内容
+    LabLink -> Experiment: handle_exp_data_updated(data)
+    Experiment -> Experiment: 处理实验数据
+    
+    Server -> TCPConnection: 发送图表数据开始更新
+    TCPConnection -> LabLink: 接收通知
+    LabLink -> Protocol: 反序列化通知
+    Protocol --> LabLink: 返回消息内容
+    LabLink -> Experiment: handle_exp_chart_data_updated_started(data)
+    Experiment -> Experiment: 准备接收图表数据
+    
+    Server -> TCPConnection: 发送图表数据
+    TCPConnection -> LabLink: 接收数据
+    LabLink -> Protocol: 反序列化数据
+    Protocol --> LabLink: 返回消息内容
+    LabLink -> Experiment: handle_exp_chart_data_updated(data)
+    Experiment -> Experiment: 处理图表数据
+    
+    Server -> TCPConnection: 发送图表数据更新完成
+    TCPConnection -> LabLink: 接收通知
+    LabLink -> Protocol: 反序列化通知
+    Protocol --> LabLink: 返回消息内容
+    LabLink -> Experiment: handle_exp_chart_data_updated_finished(data)
+    Experiment -> Experiment: 完成图表数据处理
 end
 
 note right of Server
-    服务器实验完成
+  实验执行完成
 end note
 
-Server -> Connection: 发送实验完成信息和参数
-Connection -> DeviceManager: 接收实验完成信息和参数
-DeviceManager -> ExperimentManager: 转发实验完成信息和参数
-ExperimentManager -> Experiment: 获取实验完成信息和参数
-Experiment -> Experiment: 处理实验完成信息
+Server -> TCPConnection: 发送实验完成通知
+TCPConnection -> LabLink: 接收通知
+LabLink -> Protocol: 反序列化通知
+Protocol --> LabLink: 返回消息内容
+LabLink -> Experiment: handle_exp_finished(data)
+Experiment -> Experiment: 更新实验状态为已完成
+Experiment -> Experiment: 处理最终结果数据
 
-== 结束阶段 ==
-Experiment -> ExperimentManager: 实验完成
-ExperimentManager -> Experiment: 保存结果并注销实验实例
-ExperimentManager -> ExperimentResult: 保存结果
-deactivate Experiment
-activate ExperimentResult
-ExperimentResult -> Client: 返回结果信息
-deactivate ExperimentResult
+== 等待实验完成 ==
 
-Client -> DeviceManager: 断开连接
-DeviceManager -> ExperimentManager: 注销实验管理器
-deactivate ExperimentManager
+Client -> LabLink: wait_for_experiment_completion()
+LabLink -> ExperimentManager: wait_for_experiment_completion()
+ExperimentManager -> Experiment: 轮询get_status()
+Experiment --> ExperimentManager: 返回实验状态
+ExperimentManager --> LabLink: 实验已完成
+LabLink --> Client: 实验已完成
 
-DeviceManager -> Connection: 请求断开连接
-Connection -> Server: 断开连接
-Server -> Connection: 确认断开
+== 获取实验结果 ==
+
+Client -> LabLink: get_experiment_result()
+LabLink -> ExperimentManager: get_experiment_result()
+ExperimentManager -> Experiment: get_result()
+Experiment --> ExperimentManager: 返回实验结果
+ExperimentManager --> LabLink: 返回实验结果
+LabLink --> Client: 返回实验结果
+
+== 断开连接阶段 ==
+
+Client -> LabLink: disconnect()
+LabLink -> Protocol: 序列化登出消息
+Protocol --> LabLink: 返回序列化后的消息
+LabLink -> TCPConnection: 发送登出请求
+TCPConnection -> Server: 发送登出消息
+Server --> TCPConnection: 返回登出响应
+TCPConnection -> LabLink: 接收登出响应
+
+LabLink -> Heartbeat: 停止心跳
+deactivate Heartbeat
+
+LabLink -> TCPConnection: disconnect()
+TCPConnection -> Server: 断开连接
+Server --> TCPConnection: 连接断开
 deactivate Server
-Connection -> DeviceManager: 断开连接成功
-deactivate Connection
-deactivate DeviceManager
-deactivate Client
+TCPConnection --> LabLink: 断开连接完成
+deactivate TCPConnection
+
+LabLink -> ExperimentManager: 注销实验
+ExperimentManager -> Experiment: 清理实验资源
+deactivate Experiment
+deactivate ExperimentManager
+deactivate Device
+deactivate Protocol
+deactivate LabLink
 
 @enduml 

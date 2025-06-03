@@ -16,7 +16,6 @@ class TimeoutError(Exception):
     pass
 
 from utils import LoggerManager
-from utils.exceptions import ConnectionError
 
 # 创建logger
 logger = LoggerManager.get_logger(name='connection')
@@ -56,50 +55,71 @@ class TCPConnection:
     
     def connect(self) -> bool:
         """
-        连接服务器
+        连接到服务器
         
         Returns:
-            bool: 是否连接成功
+            bool: 连接是否成功
         """
+        if self.connected:
+            return True
+        
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.settimeout(self.timeout)
-            self.socket.connect((self.host, self.port)) # 阻塞连接
-            self.connected = True
+            self.socket.connect((self.host, self.port))
             
-            # 启动收发线程
+            # 设置非阻塞模式
+            self.socket.setblocking(0)
+            
+            # 启动接收线程
             self._running = True
-            self._start_threads()
+            self.connected = True
+            self._recv_thread = threading.Thread(target=self._recv_worker, daemon=True)
+            self._recv_thread.start()
             
-            logger.info(f"连接成功: {self.host}:{self.port}")
+            # 启动发送线程
+            self._send_thread = threading.Thread(target=self._send_worker, daemon=True)
+            self._send_thread.start()
+            
+            logger.info(f"Connected successfully: {self.host}:{self.port}")
+            return True
+        except Exception as e:
+            logger.error(f"Connection failed: {str(e)}")
+            return False
+    
+    def disconnect(self) -> bool:
+        """
+        断开连接
+        
+        Returns:
+            bool: 是否成功断开连接
+        """
+        if not self.connected:
             return True
             
-        except socket.error as e:
-            self.connected = False
-            logger.error(f"连接失败: {str(e)}")
-            raise ConnectionError(f"无法连接到 {self.host}:{self.port} - {str(e)}")
-    
-    def disconnect(self) -> None:
-        """断开连接"""
-        # 停止所有线程 
-        self._running = False
-        
-        # 等待线程结束
-        self._wait_threads_end()
-        
-        # 关闭连接
-        if self.socket:
+        try:
+            self._running = False
+            
+            # 等待线程结束
+            if self._recv_thread and self._recv_thread.is_alive():
+                self._recv_thread.join(1.0)  # 最多等待1秒
+            
+            if self._send_thread and self._send_thread.is_alive():
+                self._send_thread.join(1.0)  # 最多等待1秒
+                
+            # 关闭socket
             try:
+                self.socket.shutdown(socket.SHUT_RDWR)
                 self.socket.close()
-            except socket.error as e:
-                logger.error(f"断开连接异常: {str(e)}")
-            finally:
-                self.socket = None
-                self.connected = False
-                logger.warn("已断开连接")
-        
-        # 清空队列
-        self._clear_queues()
+            except Exception as e:
+                logger.error(f"Disconnect exception: {str(e)}")
+            
+            self.connected = False
+            logger.warn("Connection disconnected")
+            return True
+        except Exception as e:
+            logger.error(f"Disconnect error: {str(e)}")
+            return False
     
     def _start_threads(self) -> None:
         """启动工作线程"""
@@ -136,14 +156,15 @@ class TCPConnection:
         self._recv_thread = None
     
     def _clear_queues(self) -> None:
-        """清空消息队列"""
+        """清空所有队列"""
         try:
             while not self._send_queue.empty():
-                self._send_queue.get_nowait()
-                self._send_queue.task_done()
-                
+                self._send_queue.get()
+            
+            while not self._recv_queue.empty():
+                self._recv_queue.get()
         except Exception as e:
-            logger.error(f"清空队列异常: {e}")
+            logger.error(f"Queue clearing exception: {e}")
     
     def _send_worker(self) -> None:
         """发送线程工作函数"""
@@ -160,20 +181,19 @@ class TCPConnection:
                 if self.socket and self.connected:
                     with self._lock:
                         self.socket.sendall(data)
-                        logger.debug(f"发送数据: {len(data)}字节")
                 else:
-                    logger.warning("发送失败: 未连接")
+                    logger.warning("Send failed: Not connected")
                     
                 # 标记任务完成
                 self._send_queue.task_done()
                 
             except socket.error as e:
-                logger.error(f"发送错误: {e}")
+                logger.error(f"Send error: {e}")
                 self.connected = False
                 self._running = False
                 break
             except Exception as e:
-                logger.error(f"发送线程异常: {e}")
+                logger.error(f"Send thread exception: {e}")
         
     
     def _recv_worker(self) -> None:
@@ -194,7 +214,6 @@ class TCPConnection:
                             data = self.socket.recv(self.buffer_size)
                             
                         if not data:
-                            logger.warning("接收到空数据，可能连接已断开")
                             time.sleep(0.1)
                             continue
                         
@@ -210,7 +229,7 @@ class TCPConnection:
                         # 超时，继续循环
                         continue
                     except socket.error as e:
-                        logger.error(f"接收错误: {e}")
+                        logger.error(f"Receive error: {e}")
                         self.connected = False
                         self._running = False
                         break
@@ -219,7 +238,7 @@ class TCPConnection:
                     time.sleep(0.1)
                     
             except Exception as e:
-                logger.error(f"接收线程异常: {e}")
+                logger.error(f"Receive thread exception: {e}")
                 time.sleep(0.1)
     
     def _handle_received_message(self, data: bytes) -> None:
@@ -233,23 +252,29 @@ class TCPConnection:
             try:
                 self._message_callback(data)
             except Exception as e:
-                logger.error(f"消息回调执行错误: {e}")
+                logger.error(f"Message callback execution error: {e}")
     
-    def send(self, data: bytes) -> None:
+    def send(self, data: bytes) -> bool:
         """
-        发送原始数据
+        发送数据
         
         Args:
-            data: 待发送的数据
-        
-        Raises:
-            ConnectionError: 连接错误
+            data: 要发送的数据
+            
+        Returns:
+            bool: 是否成功发送
         """
         if not self.connected:
-            raise ConnectionError("未连接，无法发送数据")
-        
-        # 放入发送队列
-        self._send_queue.put(data)
+            logger.warning("Send failed: Not connected")
+            return False
+            
+        try:
+            with self._lock:
+                self._send_queue.put(data)
+            return True
+        except Exception as e:
+            logger.error(f"Send error: {e}")
+            return False
     
     def set_message_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
         """

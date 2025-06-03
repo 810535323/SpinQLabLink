@@ -55,8 +55,8 @@ class Protocol:
             return packed_data
             
         except Exception as e:
-            logger.error(f"消息打包失败: {str(e)}")
-            raise
+            logger.error(f"Message packing failed: {str(e)}")
+            return b""
     
     def deserialize_message(self, data: bytes) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -131,6 +131,6 @@ class Protocol:
             self.next_data = b''
             return True, dict_data
         except Exception as e:
-            logger.error(f"消息解包失败: {str(e)}")
+            logger.error(f"Message unpacking failed: {str(e)}")
             # 解析失败，丢弃当前包，返回剩余数据
             return False, {}

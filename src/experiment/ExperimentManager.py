@@ -20,6 +20,7 @@ class ExperimentManager:
     def __init__(self):
         self.EXPERIMENT_TYPE_MAP = {
             ExperimentType.NMR_PHENOMENON_AND_SIGNAL: ('experiment.exp_pulse', 'ExpPulse', 'ExpPulseParameters'),
+            ExperimentType.RABI_OSCILLATIONS: ('experiment.exp_rabi', 'ExpRabi', 'ExpRabiParameters'),
         }
         self.current_experiment = None
         self.current_experiment_params = None
@@ -38,7 +39,7 @@ class ExperimentManager:
             ValueError: 实验类型不支持
         """
         if experiment_type not in self.EXPERIMENT_TYPE_MAP:
-            raise ValueError(f"未知的实验类型: {experiment_type}")
+            raise ValueError(f"Unknown experiment type: {experiment_type}")
             
         module_path, class_name, parameter_class_name = self.EXPERIMENT_TYPE_MAP[experiment_type]
         try:
@@ -48,8 +49,8 @@ class ExperimentManager:
             parameter_class = getattr(module, parameter_class_name)
             return experiment_class, parameter_class
         except (ImportError, AttributeError) as e:
-            logger.error(f"导入实验类失败: {e}")
-            raise ValueError(f"无法加载实验类型: {experiment_type}")
+            logger.error(f"Failed to import experiment class: {e}")
+            raise ValueError(f"Cannot load experiment type: {experiment_type}")
         
     def register_experiment(self, experiment_type: ExperimentType, handler_map: dict) -> tuple[Experiment, ExperimentParameter]:
         """
@@ -59,7 +60,7 @@ class ExperimentManager:
             experiment_type: 实验类型
         """
         if self.current_experiment is not None:
-            raise ValueError("请勿重复注册实验")
+            raise ValueError("Cannot register experiment more than once")
         
         experiment_class, parameter_class = self._get_experiment_class(experiment_type)
         
@@ -76,11 +77,11 @@ class ExperimentManager:
             self.current_experiment = None
             self.current_experiment_params = None
         else:
-            raise ValueError("未注册实验")
+            logger.warning("No experiment registered")
 
     def get_experiment_parameter(self):
         if self.current_experiment is None:
-            raise ValueError("未注册实验")
+            raise ValueError("No experiment registered")
         return self.current_experiment.get_experiment_parameter()
 
     def wait_for_experiment_completion(self):
@@ -88,7 +89,7 @@ class ExperimentManager:
         等待实验完成
         """
         if self.current_experiment is None:
-            raise ValueError("未注册实验")
+            raise ValueError("No experiment registered")
         
         is_finished = self.current_experiment.get_status() == ExperimentState.COMPLETED \
             or self.current_experiment.get_status() == ExperimentState.FAILED
@@ -101,5 +102,5 @@ class ExperimentManager:
         获取实验结果
         """
         if self.current_experiment is None:
-            raise ValueError("未注册实验")
+            raise ValueError("No experiment registered")
         return self.current_experiment.get_result()

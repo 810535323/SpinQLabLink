@@ -1,5 +1,11 @@
-from src.spinqlablink import SpinQLabLink
-from src.utils.types import ExperimentType
+from spinqlablink import SpinQLabLink
+from utils.types import ExperimentType
+from utils.pulse import Pulse
+
+# 绘制图表
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtWidgets
+import numpy as np
 
 def main():
     # 创建连接
@@ -11,19 +17,16 @@ def main():
         return
     
     # 注册 NMR 实验
-    nmr, nmr_para = spinqlablink.register_experiment(ExperimentType.NMR_PHENOMENON_AND_SIGNAL)
+    _, exp_pulse_para = spinqlablink.register_experiment(ExperimentType.NMR_PHENOMENON_AND_SIGNAL)
     
-    # 设置磷脉冲序列
-    import json
-    nmr_para.set_pulse(json.dumps({"hpulse":{"width": 40, "amp": 100, "phase": 90, "detune": 0},
-                                    "ppulse":{"width": 40, "amp": 0, "phase": 0, "detune": 0}}))
+    exp_pulse_para.pulses = [Pulse(path=0,width=40, amplitude=100, phase=90, detuning=0)]
     
     # 设置其他参数
-    nmr_para.freq_h = 27.551385  # 氢共振频率 (MHz)
-    nmr_para.freq_p = 11.2  # 磷共振频率 (MHz)
-    nmr_para.makePps = False  # 生成 PPS 信号
-    nmr_para.samplePath = 0  # 采样路径：0=氢通道，1=磷通道
-    nmr_para.custom_freq = True  # 使用自定义频率
+    exp_pulse_para.freq_h = 37.852105  # 氢共振频率 (MHz)
+    exp_pulse_para.freq_p = 15.322872  # 磷共振频率 (MHz)
+    exp_pulse_para.makePps = True  # 生成 PPS 信号
+    exp_pulse_para.samplePath = 0  # 采样路径：0=氢通道，1=磷通道
+    exp_pulse_para.custom_freq = False  # 使用自定义频率(true:使用自定义频率freq_h和freq_p,false:采用设备锁场的频率)
     
     spinqlablink.run_experiment()
     print("等待实验完成")
@@ -32,11 +35,12 @@ def main():
     result = spinqlablink.get_experiment_result()
     
     spinqlablink.disconnect()
-    for key, value in result.items():
-        if key != "graph":
-            print(f"{key}: {value}")
+
+    print_graph(result)
+
+def print_graph(result):
     # 获取图表数据
-    graph_data = result["graph"]
+    graph_data = result["result"]["graph"]
     
     # 初始化数据列表
     fftRe, fftIm, fftMod, fidRe, fidIm, fidMod, lorenz = [], [], [], [], [], [], []
@@ -58,15 +62,13 @@ def main():
                 fidMod = points
             elif chart_name == "lorenz":
                 lorenz = points
-    # 绘制图表
-    import pyqtgraph as pg
-    from pyqtgraph.Qt import QtWidgets
-    import numpy as np
-    
     # 创建应用和窗口
     app = QtWidgets.QApplication([])
     win = pg.GraphicsLayoutWidget(show=True, title="NMR 实验结果")
     win.resize(1200, 600)
+    
+    # 设置背景为白色
+    win.setBackground('w')
     
     # 添加两个绘图区域
     p1 = win.addPlot(title="FID 信号和 Lorenz 拟合")

@@ -1,38 +1,21 @@
+# Copyright 2025 SpinQ Technology Co., Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from setuptools import setup, find_packages
 import os
-from setuptools.command.develop import develop
-from setuptools.command.install import install
-
-
-class PostDevelopCommand(develop):
-    """安装后的开发模式设置"""
-    def run(self):
-        develop.run(self)
-        # 安装后的开发模式设置，例如创建日志目录
-        self._create_log_directory()
-        print("开发模式安装完成，创建了日志目录")
-    
-    def _create_log_directory(self):
-        log_dir = os.path.join(os.path.expanduser("~"), ".spinq", "logs")
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-            print(f"创建日志目录: {log_dir}")
-
-
-class PostInstallCommand(install):
-    """安装后的设置"""
-    def run(self):
-        install.run(self)
-        # 安装后的设置，例如创建日志目录
-        self._create_log_directory()
-        print("安装完成，创建了日志目录")
-    
-    def _create_log_directory(self):
-        log_dir = os.path.join(os.path.expanduser("~"), ".spinq", "logs")
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-            print(f"创建日志目录: {log_dir}")
-
+import sys
+import platform
 
 setup(
     name="spinqlablink",
@@ -41,31 +24,27 @@ setup(
     author="SpinQ",
     author_email="support@spinq.com",
     url="https://github.com/spinqtech",
-    packages=find_packages(),
+    packages=find_packages(include=['src', 'src.*']),
+    package_dir={'spinqlablink': 'src'},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
         "Topic :: Scientific/Engineering",
         "Topic :: Scientific/Engineering :: Physics",
+        "Operating System :: Microsoft :: Windows",
+        "Operating System :: POSIX :: Linux",
+        "Operating System :: MacOS"
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     install_requires=[
         "requests>=2.25.0",
         "numpy>=1.20.0",
-        "matplotlib>=3.4.0",
+        "matplotlib>=3.4.0"
     ],
-    keywords="quantum computing, remote experiments, spinq",
-    cmdclass={
-        'develop': PostDevelopCommand,
-        'install': PostInstallCommand,
-    },
+    keywords="quantum computing, remote experiments, spinq lab",
     entry_points={
         'console_scripts': [
             'spinqlablink=src.cli:main',

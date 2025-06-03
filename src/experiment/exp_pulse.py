@@ -4,15 +4,16 @@ NMR Experiment Module
 Provides Nuclear Magnetic Resonance experiment functionality
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 import time
 import json
+import uuid
 
 from experiment.experiment_base import Experiment, ExperimentParameter, ExperimentResult, ExperimentState
 from utils import LoggerManager
 from utils.types import ExperimentType
+from utils.pulse import Pulse
 from pydantic import Field
-
 # Create logger
 logger = LoggerManager.get_logger(name='exp_pulse')
 
@@ -28,27 +29,32 @@ class ExpPulseResult(ExperimentResult):
 
     def get_result(self) -> Dict[str, Any]:
         """Get experiment result"""
-        return self.graph
+        return {
+            "graph": self.graph
+        }
 
 class ExpPulseParameters(ExperimentParameter):
     """Pulse Experiment Parameters Class"""
-    pulse_json: str = Field(default="", description="Pulse sequence in JSON format")
+    pulses: List[Pulse] = Field(default=[], description="Pulse sequence")
     freq_h: float = Field(default=27.0, gt=0, lt=100, description="Hydrogen resonance frequency (MHz)")
     freq_p: float = Field(default=11.0, gt=0, lt=100, description="Phosphorus resonance frequency (MHz)")
     makePps: bool = Field(default=False, description="Whether to generate PPS signal")
     samplePath: int = Field(default=0, ge=0, le=1, description="Sampling path selection: 0 for hydrogen channel, 1 for phosphorus channel")
     custom_freq: bool = Field(default=True, description="Whether to use custom frequency(h_freq or p_freq)")
 
-    def set_pulse(self, pulse_json: str):
-        """Set pulse sequence"""
-        try:
-            if not self._validate_pulse_json(pulse_json):
-                raise ValueError("Invalid pulse sequence")
-            self.pulse_json = pulse_json
-        except Exception as e:
-            logger.error(f"Error setting pulse sequence: {e}")
-            raise e
-    
+    def append_pulse(self, pulse: Pulse):
+        self.pulses.append(pulse)
+
+    def _convert_pulse(self) -> Dict[str, Any]:
+        """Convert pulse to dictionary"""
+        hpulse, ppulse = [], []
+        for pulse in self.pulses:
+            if pulse.path == 0:
+                hpulse.append(pulse.to_dict())
+            else:
+                ppulse.append(pulse.to_dict())
+        return {"hPulse": hpulse, "pPulse": ppulse}
+
     def get_parameters(self) -> Dict[str, Any]:
         """Convert parameters to dictionary"""
         return {
@@ -57,7 +63,7 @@ class ExpPulseParameters(ExperimentParameter):
             "freq_p": self.freq_p * 1000000,
             "repeat": 0,
             "makePps": self.makePps,
-            "pulse": json.loads(self.pulse_json),
+            "pulse": self._convert_pulse(),
             "samplePath": self.samplePath,
             "sampleQubit": 0,
             "usingAwgFile": False
@@ -98,8 +104,15 @@ class ExpPulse(Experiment):
 
     def handle_exp_added(self, data: Dict[str, Any]) -> None:
         """处理实验添加，实现具体实验类型的添加处理"""
-        self.id = data["taskId"]
-        self.created_at = time.time()
+        try:
+            if data["code"] == 0:
+                self.id = data["taskId"]
+                self.created_at = time.time()
+            else:
+                raise Exception(f"Experiment addition failed: {data}")
+        except Exception as e:
+            logger.error(f"Error processing experiment addition: {e}")
+            raise
 
     def handle_exp_started(self, data: Dict[str, Any]) -> None:
         """处理实验开始，实现具体实验类型的开始处理"""
@@ -171,5 +184,5 @@ class ExpPulse(Experiment):
             "type": self.experiment_type,
             "extra": "",
             "params": json.dumps(self.parameters.get_parameters()),
-            "graph": self.result.get_result()
+            "result": self.result.get_result()
         }
