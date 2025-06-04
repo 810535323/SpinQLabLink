@@ -1,76 +1,9 @@
-from spinqlablink import SpinQLabLink
-from utils.types import ExperimentType
-from utils.pulse import Pulse
-from typing import List
-
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets
 import numpy as np
+from typing import List
+from utils.pulse import Pulse
 
-def main():
-    spinqlablink = SpinQLabLink("192.168.9.121", 8181, "anyword", "anyword")
-    spinqlablink.connect()
-
-    if not spinqlablink.wait_for_login():
-        print("Login failed")
-        return
-    
-    _, exp_pulse_para = spinqlablink.register_experiment(ExperimentType.NMR_PHENOMENON_AND_SIGNAL)
-    
-    parse_spinq_file(exp_pulse_para.pulses,"./examples/Gemini_Q1_X90.spinq")
-    parse_spinq_file(exp_pulse_para.pulses,"./examples/Gemini_Q1_Y90.spinq")
-    # Set other parameters
-    exp_pulse_para.freq_h = 37.852105  # Hydrogen resonance frequency (MHz)
-    exp_pulse_para.freq_p = 15.322872  # Phosphorus resonance frequency (MHz)
-    exp_pulse_para.makePps = True  # Generate PPS signal
-    exp_pulse_para.samplePath = 0  # Sampling path: 0=hydrogen channel, 1=phosphorus channel
-    exp_pulse_para.custom_freq = False  # Use custom frequency(true: use custom freq_h and freq_p, false: use device locked frequency)
-    spinqlablink.run_experiment()
-    print("Waiting for experiment completion")
-    spinqlablink.wait_for_experiment_completion()
-
-    result = spinqlablink.get_experiment_result()
-    
-    spinqlablink.disconnect()
-
-    print_graph(result)
-
-def parse_spinq_file(pulses: List[Pulse], file_path: str):
-    try:
-        with open(file_path, "r") as file:
-            file_dict = file.read()
-            
-        # Parse pulse file content
-        import json
-        file_dict = json.loads(file_dict)
-        pulses_dict = file_dict["pulse"]
-        
-        # Parse hydrogen channel pulses
-        for pulse in pulses_dict["channel1_pulse"]:
-            pulses.append(Pulse(
-                path=0,  # Hydrogen channel
-                width=pulse.get("width", 0),
-                amplitude=pulse.get("amplitude", 0.0),
-                phase=pulse.get("phase", 0.0),
-                detuning=pulse.get("detuning", 0.0)
-            ))
-        
-        # Parse phosphorus channel pulses
-        for pulse in pulses_dict["channel2_pulse"]:
-            pulses.append(Pulse(
-                path=1,  # Phosphorus channel
-                width=pulse.get("width", 0),
-                amplitude=pulse.get("amplitude", 0.0),
-                phase=pulse.get("phase", 0.0),
-                detuning=pulse.get("detuning", 0.0)
-            ))
-    except FileNotFoundError:
-        print(f"could not find pulse file: {file_path}")
-    except json.JSONDecodeError:
-        print("pulse file format error, could not parse JSON content")
-    except Exception as e:
-        print(f"error: {str(e)}")
-    
 def print_graph(result):
     # Get chart data
     graph_data = result["result"]["graph"]
@@ -156,5 +89,39 @@ def print_graph(result):
     print("Chart data plotting completed")
     app.exec_()
 
-if __name__ == "__main__":
-    main()
+def parse_spinq_file(pulses: List[Pulse], file_path: str):
+    try:
+        with open(file_path, "r") as file:
+            file_dict = file.read()
+            
+        # Parse pulse file content
+        import json
+        file_dict = json.loads(file_dict)
+        pulses_dict = file_dict["pulse"]
+        
+        # Parse hydrogen channel pulses
+        for pulse in pulses_dict["channel1_pulse"]:
+            pulses.append(Pulse(
+                path=0,  # Hydrogen channel
+                width=pulse.get("width", 0),
+                amplitude=pulse.get("amplitude", 0.0),
+                phase=pulse.get("phase", 0.0),
+                detuning=pulse.get("detuning", 0.0)
+            ))
+        
+        # Parse phosphorus channel pulses
+        for pulse in pulses_dict["channel2_pulse"]:
+            pulses.append(Pulse(
+                path=1,  # Phosphorus channel
+                width=pulse.get("width", 0),
+                amplitude=pulse.get("amplitude", 0.0),
+                phase=pulse.get("phase", 0.0),
+                detuning=pulse.get("detuning", 0.0)
+            ))
+    except FileNotFoundError:
+        print(f"could not find pulse file: {file_path}")
+    except json.JSONDecodeError:
+        print("pulse file format error, could not parse JSON content")
+    except Exception as e:
+        print(f"error: {str(e)}")
+        

@@ -60,7 +60,7 @@ class HeartbeatManager:
             return
         
         logger.debug("Starting heartbeat")
-        self.is_running = True
+        self._is_running = True
         self.last_heartbeat_response_time = time.time()
         
         # 开启心跳发送定时器
@@ -104,7 +104,7 @@ class HeartbeatManager:
         except Exception as e:
             logger.error(f"Failed to send heartbeat: {e}")
         # 设置下一次心跳发送
-        if self.is_running:
+        if self._is_running:
             self.heartbeat_timer = threading.Timer(HEARTBEAT_INTERVAL, self._send_heartbeat)
             self.heartbeat_timer.daemon = True
             self.heartbeat_timer.start()
@@ -120,7 +120,7 @@ class HeartbeatManager:
         
         if elapsed_time > HEARTBEAT_TIMEOUT:
             logger.error(f"心跳超时（{elapsed_time:.1f}秒），判断为断开连接")
-            self.is_running = False
+            self._is_running = False
             
             # 调用超时回调
             if self.on_timeout_callback:
@@ -130,7 +130,7 @@ class HeartbeatManager:
                     logger.error(f"心跳超时回调执行失败: {e}")
         else:
             # 继续检查
-            if self.is_running:
+            if self._is_running:
                 self.heartbeat_checking_timer = threading.Timer(5, self._check_heartbeat_timeout)
                 self.heartbeat_checking_timer.daemon = True
                 self.heartbeat_checking_timer.start()

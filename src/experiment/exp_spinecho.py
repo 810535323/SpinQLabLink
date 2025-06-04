@@ -13,17 +13,14 @@ from utils import LoggerManager
 from utils.types import ExperimentType
 from utils.pulse import Pulse
 from pydantic import Field
-
 # Create logger
-logger = LoggerManager.get_logger(name='exp_rabi')
+logger = LoggerManager.get_logger(name='exp_spinecho')
 
-class ExpRabiResult(ExperimentResult):
-    """Rabi Experiment Result Class"""
+class ExpSpinechoResult(ExperimentResult):
+    """Spinecho Experiment Result Class"""
     def __init__(self):
         super().__init__()
         self.graph = []
-        self.width = 0
-        self.amplitude = 0
     
     def append_graph(self, lines: Dict[str, Any]):
         """Append Line Graph"""
@@ -32,19 +29,20 @@ class ExpRabiResult(ExperimentResult):
     def get_result(self) -> Dict[str, Any]:
         """Get experiment result"""
         return {
-            "graph": self.graph,
-            "width": self.width,
-            "real": self.amplitude
+            "graph": self.graph
         }
 
-class ExpRabiParameters(ExperimentParameter):
-    """Rabi Experiment Parameters Class"""
+class ExpSpinechoParameters(ExperimentParameter):
+    """Spinecho Experiment Parameters Class"""
     pulses: List[Pulse] = Field(default=[], description="Pulse sequence")
-    freq_h: float = Field(default=27.0, gt=0, lt=100, description="Hydrogen resonance frequency (MHz)")
-    freq_p: float = Field(default=11.0, gt=0, lt=100, description="Phosphorus resonance frequency (MHz)")
-    makePps: bool = Field(default=False, description="Whether to generate PPS signal")
     samplePath: int = Field(default=0, ge=0, le=1, description="Sampling path selection: 0 for hydrogen channel, 1 for phosphorus channel")
-    custom_freq: bool = Field(default=True, description="Whether to use custom frequency(h_freq or p_freq)")
+    sampleFre: int = Field(default=10000, ge=10000, le=100000, step=10000, description="Sample frequency, only accepts 10k-100k, with 10k intervals")
+    sampleCount: int = Field(default=16000, ge=1, le=16000, description="Sample count")
+    sampleDelay: int = Field(default=0, ge=0, le=1000, description="Sample delay")
+    h_freShift: int = Field(default=0, ge=-1000, le=1000, description="Hydrogen frequency shift")
+    p_freShift: int = Field(default=0, ge=-1000, le=1000, description="Phosphorus frequency shift")
+    h_freDemo: int = Field(default=0, ge=-1000, le=1000, description="Hydrogen frequency demo")
+    p_freDemo: int = Field(default=0, ge=-1000, le=1000, description="Phosphorus frequency demo")
 
     def append_pulse(self, pulse: Pulse):
         self.pulses.append(pulse)
@@ -62,34 +60,34 @@ class ExpRabiParameters(ExperimentParameter):
     def get_parameters(self) -> Dict[str, Any]:
         """Convert parameters to dictionary"""
         return {
-            "custom_freq": self.custom_freq,
-            "freq_h": self.freq_h * 1000000,
-            "freq_p": self.freq_p * 1000000,
-            "repeat": 0,
-            "makePps": self.makePps,
+            "sampleCount": self.sampleCount,
+            "sampleFre": self.sampleFre,
+            "sampleDelay": self.sampleDelay,
+            "h_freShift": self.h_freShift,
+            "p_freShift": self.p_freShift,
+            "h_freDemo": self.h_freDemo,
+            "p_freDemo": self.p_freDemo,
             "pulse": self._convert_pulse(),
-            "samplePath": self.samplePath,
-            "sampleQubit": 0,
-            "usingAwgFile": False
+            "samplePath": self.samplePath
         }
 
-class ExpRabi(Experiment):
-    """Rabi Experiment Class"""
+class ExpSpinecho(Experiment):
+    """Spinecho Experiment Class"""
     
-    def __init__(self, parameters: ExpRabiParameters):
+    def __init__(self, parameters: ExpSpinechoParameters):
         """
-        Initialize Rabi experiment
+        Initialize Spinecho experiment
         
         Args:
-            parameters: Rabi experiment parameters
+            parameters: Spinecho experiment parameters
         """
         super().__init__(parameters)
-        self.experiment_type = ExperimentType.RABI_OSCILLATIONS
+        self.experiment_type = ExperimentType.SPIN_ECHO
         self.name = self.experiment_type + "-" + self.id[:8]
-        self.result = ExpRabiResult()
+        self.result = ExpSpinechoResult()
         self.step_graph = {}
         
-        logger.info(f"Created Rabi experiment:{self.name}")
+        logger.info(f"Created Spinecho experiment:{self.name}")
 
     def get_experiment_parameter(self) -> Dict[str, Any]:
         """获取实验参数"""
@@ -101,7 +99,7 @@ class ExpRabi(Experiment):
             "startTime": 0,
             "state": ExperimentState.PENDING,
             "type": self.experiment_type,
-            "extra": "",
+            "extra": "1",
             "params": json.dumps(self.parameters.get_parameters())
         }
         return para
@@ -136,9 +134,7 @@ class ExpRabi(Experiment):
         """处理实验数据更新，实现具体实验类型的数据更新处理"""
         if data["taskId"] == self.id:
             logger.debug(f"Experiment data updated: {data}")
-            self.result.width = data["data"]["exp_rabi"]["width"]
-            self.result.amplitude = data["data"]["exp_rabi"]["amplitude"]
-
+    
     def handle_exp_chart_data_updated_started(self, data: Dict[str, Any]) -> None:
         """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
         if data["taskId"] == self.id:
@@ -189,7 +185,7 @@ class ExpRabi(Experiment):
             "startTime": self.started_at,
             "state": self.state,
             "type": self.experiment_type,
-            "extra": "",
+            "extra": "1",
             "params": json.dumps(self.parameters.get_parameters()),
             "result": self.result.get_result()
         }

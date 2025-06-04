@@ -1,9 +1,7 @@
 from spinqlablink import SpinQLabLink
 from utils.types import ExperimentType
-from utils.pulse import Pulse
 
-from toolsfunc import print_graph
-
+from toolsfunc import print_graph, parse_spinq_file
 def main():
     # Create connection
     spinqlablink = SpinQLabLink("192.168.9.121", 8181, "anyword", "anyword")
@@ -13,18 +11,21 @@ def main():
         print("Login failed")
         return
     
-    # Register Pulse experiment
-    _, exp_pulse_para = spinqlablink.register_experiment(ExperimentType.NMR_PHENOMENON_AND_SIGNAL)
+    # Register spinecho experiment
+    _, exp_pulse_para = spinqlablink.register_experiment(ExperimentType.SPIN_ECHO)
     
-    exp_pulse_para.pulses = [Pulse(path=0,width=40, amplitude=100, phase=90, detuning=0)]
-    
+    parse_spinq_file(exp_pulse_para.pulses,"./examples/lab_file.spinq")
+
     # Set other parameters
-    exp_pulse_para.freq_h = 37.852105  # Hydrogen resonance frequency (MHz)
-    exp_pulse_para.freq_p = 15.322872  # Phosphorus resonance frequency (MHz)
-    exp_pulse_para.makePps = True  # Generate PPS signal
+    exp_pulse_para.sampleCount = 16000  # Sample count
+    exp_pulse_para.sampleFre = 10000  # Sample frequency
+    exp_pulse_para.sampleDelay = 0  # Sample delay
+    exp_pulse_para.h_freShift = 0  # Hydrogen frequency shift
+    exp_pulse_para.p_freShift = 0  # Phosphorus frequency shift
+    exp_pulse_para.h_freDemo = 0  # Hydrogen frequency demo
+    exp_pulse_para.p_freDemo = 0  # Phosphorus frequency demo
     exp_pulse_para.samplePath = 0  # Sampling path: 0=Hydrogen channel, 1=Phosphorus channel
-    exp_pulse_para.custom_freq = False  # Use custom frequency (true: use custom freq_h and freq_p, false: use device's lock field frequency)
-    
+
     spinqlablink.run_experiment()
     print("Waiting for experiment completion")
     spinqlablink.wait_for_experiment_completion()

@@ -21,6 +21,9 @@ class ExperimentManager:
         self.EXPERIMENT_TYPE_MAP = {
             ExperimentType.NMR_PHENOMENON_AND_SIGNAL: ('experiment.exp_pulse', 'ExpPulse', 'ExpPulseParameters'),
             ExperimentType.RABI_OSCILLATIONS: ('experiment.exp_rabi', 'ExpRabi', 'ExpRabiParameters'),
+            ExperimentType.QUANTUM_DECOHERENCE_T1: ('experiment.exp_decot1', 'ExpT1', 'ExpT1Parameters'),
+            ExperimentType.QUANTUM_DECOHERENCE_T2: ('experiment.exp_decot2', 'ExpT2', 'ExpT2Parameters'),
+            ExperimentType.SPIN_ECHO: ('experiment.exp_spinecho', 'ExpSpinecho', 'ExpSpinechoParameters'),
         }
         self.current_experiment = None
         self.current_experiment_params = None

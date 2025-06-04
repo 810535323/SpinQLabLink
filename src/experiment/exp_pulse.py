@@ -85,7 +85,7 @@ class ExpPulse(Experiment):
         self.result = ExpPulseResult()
         self.step_graph = {}
         
-        logger.info(f"Created Pulse experiment")
+        logger.info(f"Created Pulse experiment:{self.name}")
 
     def get_experiment_parameter(self) -> Dict[str, Any]:
         """获取实验参数"""
@@ -121,6 +121,7 @@ class ExpPulse(Experiment):
             self.started_at = queue["startTime"]
             self.name = queue["name"]
             self.state = ExperimentState.RUNNING
+            logger.info(f"Experiment chart data updated started:{self.name}")
     
     def handle_exp_step_changed(self, data: Dict[str, Any]) -> None:
         """处理实验步骤变化，实现具体实验类型的步骤变化处理"""
@@ -130,7 +131,7 @@ class ExpPulse(Experiment):
     def handle_exp_data_updated(self, data: Dict[str, Any]) -> None:
         """处理实验数据更新，实现具体实验类型的数据更新处理"""
         if data["taskId"] == self.id:
-            logger.info(f"Experiment data updated: {data}")
+            logger.debug(f"Experiment data updated:{data}")
     
     def handle_exp_chart_data_updated_started(self, data: Dict[str, Any]) -> None:
         """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
@@ -153,14 +154,14 @@ class ExpPulse(Experiment):
         if data["taskId"] == self.id:
             self.state = ExperimentState.FAILED
     
-    def handle_exp_removed(self) -> None:
+    def handle_exp_removed(self, data: Dict[str, Any]) -> None:
         """处理实验移除，实现具体实验类型的移除处理"""
         self.completed_at = time.time()
         self.state = ExperimentState.FAILED
 
     def handle_exp_finished(self, data: Dict[str, Any]) -> None:
         """处理实验结束，实现具体实验类型的结束处理"""
-        logger.info(f"Experiment finished: {data}")
+        logger.info(f"Experiment finished:{self.name}")
         if data["taskId"] == self.id:
             self.completed_at = time.time()
             if data["data"]["isTerminated"] == False:

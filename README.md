@@ -256,7 +256,7 @@ spinqlablink --help
 
 ## 许可证
 
-MIT 
+Apache License 2.0
 
 ## 实验通信框架库结构图
 

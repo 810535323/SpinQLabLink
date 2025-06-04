@@ -56,27 +56,38 @@ class SpinQLabLink:
     def _send_message(self, msg_id: str, data: dict):
         serialized_message = self.protocol.serialize_message(msg_id, self._pack_metadata(), data)
         self.connection.send(serialized_message)
-
-    def _handle_received_message(self, data: bytes):
-        success, dict_data = self.protocol.deserialize_message(data)
-        if not success: # 消息不完全，等待下次处理
-            return
         
-        handler = self.handler_map.get(dict_data["msg_id"])
-        if handler:
-            handler(dict_data["json_data"])
-        else:
-            handler = self.exp_handler_map.get(dict_data["msg_id"])
-            if handler:
-                if "json_data" in dict_data and dict_data["json_data"]:
+    def _handle_received_message(self, data: bytes):
+        try:
+            success, dict_data = self.protocol.deserialize_message(data)
+            if not success: # 消息不完全，等待下次处理
+                return
+            
+            try:
+                handler = self.handler_map.get(dict_data["msg_id"])
+                if handler:
                     handler(dict_data["json_data"])
-                elif "chart_data" in dict_data and dict_data["chart_data"]:
-                    handler(dict_data["chart_data"])
-            else:
-                logger.error(f"Message handler not found: {dict_data['msg_id']}")
+                else:
+                    handler = self.exp_handler_map.get(dict_data["msg_id"])
+                    if handler:
+                        if "json_data" in dict_data and dict_data["json_data"]:
+                            logger.debug(f"received json data:{dict_data}")
+                            handler(dict_data["json_data"])
+                        elif "chart_data" in dict_data and dict_data["chart_data"]:
+                            handler(dict_data["chart_data"])
+                    else:
+                        logger.error(f"Message handler not found: {dict_data['msg_id']}")
+            except KeyError as e:
+                logger.error(f"Key error occurred while processing message: {e}")
+            except Exception as e:
+                logger.error(f"Exception occurred while processing message: {e}")
+                self.expMgr.deregister_experiment()
+                self.disconnect()
+        except Exception as e:
+            logger.error(f"Failed to parse received message: {e}")
 
     def _handle_user_login_res(self, data: Dict[str, Any]):
-        logger.info(f"Login response: {data}")
+        logger.debug(f"Login response: {data}")
         if data["code"] == 0:
             if data["sessionId"]:
                 self.session_id = data["sessionId"]
@@ -88,7 +99,7 @@ class SpinQLabLink:
             logger.error(f"Login failed, error code: {data['json_data']['code']}, error message: {data['json_data']['message']}")
 
     def _handle_user_logout_res(self, data: Dict[str, Any]):
-        logger.info(f"Logout response: {data}")
+        logger.debug(f"Logout response: {data}")
         self.is_logged_in = False
         
         # 登出时停止心跳
@@ -99,23 +110,24 @@ class SpinQLabLink:
         self.heartbeat_manager.on_heartbeat_response()
 
     def _handle_device_param_post(self, data: Dict[str, Any]):
-        logger.info(f"Device parameters: {data}")
+        logger.debug(f"Device parameters: {data}")
         self.device.set_device_params(data)
 
     def _handle_lock_data_update_post(self, data: Dict[str, Any]):
-        logger.info(f"Device lock data update: {data}")
+        logger.debug(f"Device lock data update: {data}")
         self.device.set_lock_data_post(data)
 
     def _handle_device_info_post(self, data: Dict[str, Any]):
-        logger.info(f"Device info: {data}")
+        logger.debug(f"Device info: {data}")
         if data["connected"]:
             self.hardware_connected = data["connected"]
 
     def _handle_sample_calibration_post(self, data: Dict[str, Any]):
-        logger.info(f"Sample calibration: {data}")
+        logger.debug(f"Sample calibration: {data}")
+        pass
 
     def _handle_exp_queue_update_post(self, data: Dict[str, Any]):
-        logger.info(f"Experiment queue update: {data}")
+        logger.debug(f"Experiment queue update: {data}")
         for i, queue in enumerate(data["queue"]):
             if queue["id"] == self.expMgr.current_experiment.id:
                 if i != 0:
@@ -215,6 +227,7 @@ class SpinQLabLink:
         para = self.expMgr.get_experiment_parameter()
         para["deviceId"] = self.device_id
         para["account"] = self.account
+        logger.debug(f"send experiment para: {para}")
         self._send_message(MachineType.MSG_REQ_ADD_EXP_TASK_REQ, para)
 
     def wait_for_experiment_completion(self):
