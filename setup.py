@@ -24,8 +24,7 @@ setup(
     author="SpinQ",
     author_email="support@spinq.com",
     url="https://github.com/spinqtech",
-    packages=find_packages(include=['src', 'src.*']),
-    package_dir={'spinqlablink': 'src'},
+    packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
@@ -40,14 +39,15 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "requests>=2.25.0",
         "numpy>=1.20.0",
-        "matplotlib>=3.4.0"
+        "matplotlib>=3.4.0",
+        "pydantic>=2.0.0",
+        "protobuf>=3.19.0"
     ],
     keywords="quantum computing, remote experiments, spinq lab",
-    entry_points={
-        'console_scripts': [
-            'spinqlablink=src.cli:main',
-        ],
-    },
+    # entry_points={
+    #     'console_scripts': [
+    #         'spinqlablink=src.cli:main',
+    #     ],
+    # },
 ) 

@@ -1,3 +1,17 @@
+# Copyright 2025 SpinQ Technology Co., Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 NMR Experiment Module
 
@@ -7,21 +21,26 @@ Provides Nuclear Magnetic Resonance experiment functionality
 from typing import Dict, Any, List
 import time
 import json
-import uuid
 
-from experiment.experiment_base import Experiment, ExperimentParameter, ExperimentResult, ExperimentState
-from utils import LoggerManager
-from utils.types import ExperimentType
-from utils.pulse import Pulse
+from ..experiment.experiment_base import Experiment, ExperimentParameter, ExperimentResult, ExperimentState
+from ..utils import LoggerManager
+from ..utils.types import ExperimentType
+from ..utils.pulse import Pulse
 from pydantic import Field
-# Create logger
-logger = LoggerManager.get_logger(name='exp_pulse')
 
-class ExpPulseResult(ExperimentResult):
-    """Pulse Experiment Result Class"""
+# Create logger
+logger = LoggerManager.get_logger(name='exp_decot2')
+
+class ExpT2Result(ExperimentResult):
+    """T2 Experiment Result Class"""
     def __init__(self):
         super().__init__()
         self.graph = []
+        self.width = 0
+        self.mod = 0
+        self.coordinate = {}
+        self.matrix = {}
+        self.module = []
     
     def append_graph(self, lines: Dict[str, Any]):
         """Append Line Graph"""
@@ -30,11 +49,16 @@ class ExpPulseResult(ExperimentResult):
     def get_result(self) -> Dict[str, Any]:
         """Get experiment result"""
         return {
-            "graph": self.graph
+            "graph": self.graph,
+            "width": self.width,
+            "mod": self.mod,
+            "coordinate": self.coordinate,
+            "matrix": self.matrix,
+            "module": self.module
         }
 
-class ExpPulseParameters(ExperimentParameter):
-    """Pulse Experiment Parameters Class"""
+class ExpT2Parameters(ExperimentParameter):
+    """T2 Experiment Parameters Class"""
     pulses: List[Pulse] = Field(default=[], description="Pulse sequence")
     freq_h: float = Field(default=27.0, gt=0, lt=100, description="Hydrogen resonance frequency (MHz)")
     freq_p: float = Field(default=11.0, gt=0, lt=100, description="Phosphorus resonance frequency (MHz)")
@@ -69,23 +93,23 @@ class ExpPulseParameters(ExperimentParameter):
             "usingAwgFile": False
         }
 
-class ExpPulse(Experiment):
-    """Pulse Experiment Class"""
+class ExpT2(Experiment):
+    """T2 Experiment Class"""
     
-    def __init__(self, parameters: ExpPulseParameters):
+    def __init__(self, parameters: ExpT2Parameters):
         """
-        Initialize Pulse experiment
+        Initialize T2 experiment
         
         Args:
-            parameters: Pulse experiment parameters
+            parameters: T2 experiment parameters
         """
         super().__init__(parameters)
-        self.experiment_type = ExperimentType.NMR_PHENOMENON_AND_SIGNAL
+        self.experiment_type = ExperimentType.QUANTUM_DECOHERENCE_T2
         self.name = self.experiment_type + "-" + self.id[:8]
-        self.result = ExpPulseResult()
+        self.result = ExpT2Result()
         self.step_graph = {}
         
-        logger.info(f"Created Pulse experiment:{self.name}")
+        logger.info(f"Created T2 experiment: {self.name}")
 
     def get_experiment_parameter(self) -> Dict[str, Any]:
         """获取实验参数"""
@@ -131,8 +155,10 @@ class ExpPulse(Experiment):
     def handle_exp_data_updated(self, data: Dict[str, Any]) -> None:
         """处理实验数据更新，实现具体实验类型的数据更新处理"""
         if data["taskId"] == self.id:
-            logger.debug(f"Experiment data updated:{data}")
-    
+            logger.debug(f"Experiment data updated: {data}")
+            self.result.width = data["data"]["exp_t2"]["width"]
+            self.result.mod = data["data"]["exp_t2"]["mod"]
+
     def handle_exp_chart_data_updated_started(self, data: Dict[str, Any]) -> None:
         """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
         if data["taskId"] == self.id:
@@ -168,6 +194,13 @@ class ExpPulse(Experiment):
                 self.state = ExperimentState.COMPLETED
             else:
                 self.state = ExperimentState.FAILED
+            result = json.loads(data["data"]["parameters"]["result"])
+            self.result.coordinate = result["coordinate"]
+            self.result.matrix = {
+                "real": result["real"],
+                "imag": result["imag"]
+            }
+            self.result.module = result["module"]
 
     def get_status(self) -> str:
         """获取实验状态"""

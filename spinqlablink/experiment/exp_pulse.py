@@ -1,3 +1,17 @@
+# Copyright 2025 SpinQ Technology Co., Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 NMR Experiment Module
 
@@ -7,23 +21,21 @@ Provides Nuclear Magnetic Resonance experiment functionality
 from typing import Dict, Any, List
 import time
 import json
+import uuid
 
-from experiment.experiment_base import Experiment, ExperimentParameter, ExperimentResult, ExperimentState
-from utils import LoggerManager
-from utils.types import ExperimentType
-from utils.pulse import Pulse
+from ..experiment.experiment_base import Experiment, ExperimentParameter, ExperimentResult, ExperimentState
+from ..utils import LoggerManager
+from ..utils.types import ExperimentType
+from ..utils.pulse import Pulse
 from pydantic import Field
-
 # Create logger
-logger = LoggerManager.get_logger(name='exp_rabi')
+logger = LoggerManager.get_logger(name='exp_pulse')
 
-class ExpRabiResult(ExperimentResult):
-    """Rabi Experiment Result Class"""
+class ExpPulseResult(ExperimentResult):
+    """Pulse Experiment Result Class"""
     def __init__(self):
         super().__init__()
         self.graph = []
-        self.width = 0
-        self.amplitude = 0
     
     def append_graph(self, lines: Dict[str, Any]):
         """Append Line Graph"""
@@ -32,13 +44,11 @@ class ExpRabiResult(ExperimentResult):
     def get_result(self) -> Dict[str, Any]:
         """Get experiment result"""
         return {
-            "graph": self.graph,
-            "width": self.width,
-            "real": self.amplitude
+            "graph": self.graph
         }
 
-class ExpRabiParameters(ExperimentParameter):
-    """Rabi Experiment Parameters Class"""
+class ExpPulseParameters(ExperimentParameter):
+    """Pulse Experiment Parameters Class"""
     pulses: List[Pulse] = Field(default=[], description="Pulse sequence")
     freq_h: float = Field(default=27.0, gt=0, lt=100, description="Hydrogen resonance frequency (MHz)")
     freq_p: float = Field(default=11.0, gt=0, lt=100, description="Phosphorus resonance frequency (MHz)")
@@ -73,23 +83,23 @@ class ExpRabiParameters(ExperimentParameter):
             "usingAwgFile": False
         }
 
-class ExpRabi(Experiment):
-    """Rabi Experiment Class"""
+class ExpPulse(Experiment):
+    """Pulse Experiment Class"""
     
-    def __init__(self, parameters: ExpRabiParameters):
+    def __init__(self, parameters: ExpPulseParameters):
         """
-        Initialize Rabi experiment
+        Initialize Pulse experiment
         
         Args:
-            parameters: Rabi experiment parameters
+            parameters: Pulse experiment parameters
         """
         super().__init__(parameters)
-        self.experiment_type = ExperimentType.RABI_OSCILLATIONS
+        self.experiment_type = ExperimentType.NMR_PHENOMENON_AND_SIGNAL
         self.name = self.experiment_type + "-" + self.id[:8]
-        self.result = ExpRabiResult()
+        self.result = ExpPulseResult()
         self.step_graph = {}
         
-        logger.info(f"Created Rabi experiment:{self.name}")
+        logger.info(f"Created Pulse experiment:{self.name}")
 
     def get_experiment_parameter(self) -> Dict[str, Any]:
         """获取实验参数"""
@@ -135,10 +145,8 @@ class ExpRabi(Experiment):
     def handle_exp_data_updated(self, data: Dict[str, Any]) -> None:
         """处理实验数据更新，实现具体实验类型的数据更新处理"""
         if data["taskId"] == self.id:
-            logger.debug(f"Experiment data updated: {data}")
-            self.result.width = data["data"]["exp_rabi"]["width"]
-            self.result.amplitude = data["data"]["exp_rabi"]["amplitude"]
-
+            logger.debug(f"Experiment data updated:{data}")
+    
     def handle_exp_chart_data_updated_started(self, data: Dict[str, Any]) -> None:
         """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
         if data["taskId"] == self.id:

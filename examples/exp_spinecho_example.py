@@ -1,6 +1,4 @@
-from spinqlablink import SpinQLabLink
-from utils.types import ExperimentType
-from utils.pulse import Pulse
+from spinqlablink import SpinQLabLink, ExperimentType, Pulse
 
 from toolsfunc import print_graph
 

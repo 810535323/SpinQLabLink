@@ -1,5 +1,4 @@
-from spinqlablink import SpinQLabLink
-from utils.types import ExperimentType
+from spinqlablink import SpinQLabLink, ExperimentType
 
 from toolsfunc import print_graph, parse_spinq_file
 def main():

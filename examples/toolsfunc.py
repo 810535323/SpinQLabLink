@@ -2,7 +2,7 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets
 import numpy as np
 from typing import List
-from utils.pulse import Pulse
+from spinqlablink import Pulse
 
 def print_graph(result):
     # Get chart data

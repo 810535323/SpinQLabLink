@@ -1,3 +1,4 @@
-requests>=2.25.0
 numpy>=1.20.0
 matplotlib>=3.4.0 
+pydantic>=2.0.0
+protobuf>=3.19.0

@@ -1,16 +1,30 @@
+# Copyright 2025 SpinQ Technology Co., Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 实验管理器
 
 负责管理实验的注册、运行、等待完成和获取结果
 """
 
-from typing import Type
+from typing import Type, Dict, Any, Callable, List, Optional
 import importlib
 import time
 
-from utils import LoggerManager
-from experiment.experiment_base import Experiment, ExperimentParameter, ExperimentState
-from utils.types import ExperimentType
+from ..utils import LoggerManager
+from .experiment_base import Experiment, ExperimentParameter, ExperimentState
+from ..utils.types import ExperimentType
 
 # 创建logger
 logger = LoggerManager.get_logger(name='experiment_manager')
@@ -19,11 +33,11 @@ class ExperimentManager:
     """实验管理器"""
     def __init__(self):
         self.EXPERIMENT_TYPE_MAP = {
-            ExperimentType.NMR_PHENOMENON_AND_SIGNAL: ('experiment.exp_pulse', 'ExpPulse', 'ExpPulseParameters'),
-            ExperimentType.RABI_OSCILLATIONS: ('experiment.exp_rabi', 'ExpRabi', 'ExpRabiParameters'),
-            ExperimentType.QUANTUM_DECOHERENCE_T1: ('experiment.exp_decot1', 'ExpT1', 'ExpT1Parameters'),
-            ExperimentType.QUANTUM_DECOHERENCE_T2: ('experiment.exp_decot2', 'ExpT2', 'ExpT2Parameters'),
-            ExperimentType.SPIN_ECHO: ('experiment.exp_spinecho', 'ExpSpinecho', 'ExpSpinechoParameters'),
+            ExperimentType.NMR_PHENOMENON_AND_SIGNAL: ('spinqlablink.experiment.exp_pulse', 'ExpPulse', 'ExpPulseParameters'),
+            ExperimentType.RABI_OSCILLATIONS: ('spinqlablink.experiment.exp_rabi', 'ExpRabi', 'ExpRabiParameters'),
+            ExperimentType.QUANTUM_DECOHERENCE_T1: ('spinqlablink.experiment.exp_decot1', 'ExpT1', 'ExpT1Parameters'),
+            ExperimentType.QUANTUM_DECOHERENCE_T2: ('spinqlablink.experiment.exp_decot2', 'ExpT2', 'ExpT2Parameters'),
+            ExperimentType.SPIN_ECHO: ('spinqlablink.experiment.exp_spinecho', 'ExpSpinecho', 'ExpSpinechoParameters'),
         }
         self.current_experiment = None
         self.current_experiment_params = None
