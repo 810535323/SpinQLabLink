@@ -31,7 +31,6 @@ participant "协议处理\nProtocol" as Protocol
 participant "实验管理器\nExperimentManager" as ExperimentManager
 participant "实验实例\nExperiment" as Experiment
 participant "服务器" as Server
-participant "心跳管理器\nHeartbeatManager" as Heartbeat
 
 == 初始化与连接阶段 ==
 
@@ -46,8 +45,6 @@ LabLink -> Device: 创建设备实例(device_id)
 activate Device
 LabLink -> ExperimentManager: 创建实验管理器()
 activate ExperimentManager
-LabLink -> Heartbeat: 创建心跳管理器
-activate Heartbeat
 
 Client -> LabLink: connect()
 LabLink -> TCPConnection: connect()
@@ -56,41 +53,48 @@ activate Server
 Server --> TCPConnection: 连接成功
 TCPConnection --> LabLink: 返回连接结果
 
+LabLink -> LabLink: _login()
 LabLink -> Protocol: 序列化登录消息
 Protocol --> LabLink: 返回序列化后的消息
 LabLink -> TCPConnection: 发送登录请求
 TCPConnection -> Server: 发送登录消息
 Server --> TCPConnection: 返回登录响应
-TCPConnection -> LabLink: 接收登录响应
+TCPConnection -> LabLink: _handle_received_message(data)
 LabLink -> Protocol: 反序列化消息
 Protocol --> LabLink: 返回消息内容
-LabLink -> LabLink: 处理登录响应
+LabLink -> LabLink: _handle_user_login_res(data)
 
-LabLink -> Heartbeat: 启动心跳
-Heartbeat -> TCPConnection: 定期发送心跳包
-TCPConnection -> Server: 心跳消息
-Server --> TCPConnection: 心跳响应
-TCPConnection --> Heartbeat: 接收心跳响应
+Client -> LabLink: wait_for_login(timeout)
+LabLink -> LabLink: 等待登录完成
 
 note right of Server
   服务器发送设备参数
 end note
 
 Server -> TCPConnection: 发送设备参数
-TCPConnection -> LabLink: 接收设备参数
+TCPConnection -> LabLink: _handle_received_message(data)
 LabLink -> Protocol: 反序列化设备参数
 Protocol --> LabLink: 返回设备参数内容
-LabLink -> Device: 设置设备参数
+LabLink -> LabLink: _handle_device_param_post(data)
+LabLink -> Device: set_device_params(data)
 Device --> LabLink: 更新完成
+
+Server -> TCPConnection: 发送设备信息
+TCPConnection -> LabLink: _handle_received_message(data)
+LabLink -> Protocol: 反序列化设备信息
+Protocol --> LabLink: 返回设备信息内容
+LabLink -> LabLink: _handle_device_info_post(data)
+LabLink -> LabLink: 更新hardware_connected状态
 
 == 实验注册与参数设置阶段 ==
 
 Client -> LabLink: register_experiment(experimentType)
-LabLink -> ExperimentManager: register_experiment(experimentType, handler_map)
+LabLink -> ExperimentManager: register_experiment(experimentType, exp_handler_map)
+ExperimentManager -> ExperimentManager: _get_experiment_class(experimentType)
 ExperimentManager -> ExperimentManager: 动态加载实验类
 ExperimentManager -> Experiment: 创建实验实例和参数
 activate Experiment
-Experiment -> Experiment: 注册消息处理函数到handler_map
+Experiment -> Experiment: register_handler(exp_handler_map)
 Experiment --> ExperimentManager: 返回实验实例
 ExperimentManager --> LabLink: 返回实验实例和参数
 LabLink --> Client: 返回实验实例和参数
@@ -106,6 +110,7 @@ ExperimentManager -> Experiment: get_experiment_parameter()
 Experiment --> ExperimentManager: 返回实验参数
 ExperimentManager --> LabLink: 返回实验参数
 
+LabLink -> LabLink: _send_message(MSG_REQ_ADD_EXP_TASK_REQ, parameters)
 LabLink -> Protocol: 序列化实验参数
 Protocol --> LabLink: 返回序列化后的消息
 LabLink -> TCPConnection: 发送实验参数
@@ -116,54 +121,52 @@ note right of Server
 end note
 
 Server -> TCPConnection: 发送实验已添加响应
-TCPConnection -> LabLink: 接收响应
+TCPConnection -> LabLink: _handle_received_message(data)
 LabLink -> Protocol: 反序列化响应
 Protocol --> LabLink: 返回消息内容
+LabLink -> LabLink: 从exp_handler_map查找对应处理函数
 LabLink -> Experiment: handle_exp_added(data)
 Experiment -> Experiment: 处理实验添加响应
 
-Server -> TCPConnection: 发送实验开始通知
-TCPConnection -> LabLink: 接收通知
+Server -> TCPConnection: 发送实验队列更新通知
+TCPConnection -> LabLink: _handle_received_message(data)
 LabLink -> Protocol: 反序列化通知
 Protocol --> LabLink: 返回消息内容
+LabLink -> LabLink: _handle_exp_queue_update_post(data)
+LabLink -> LabLink: 检查队列中实验位置
+
+Server -> TCPConnection: 发送实验开始通知
+TCPConnection -> LabLink: _handle_received_message(data)
+LabLink -> Protocol: 反序列化通知
+Protocol --> LabLink: 返回消息内容
+LabLink -> LabLink: 从exp_handler_map查找对应处理函数
 LabLink -> Experiment: handle_exp_started(data)
-Experiment -> Experiment: 更新实验状态为运行中
+Experiment -> Experiment: 更新实验状态为RUNNING
 
 loop 实验步骤执行
     Server -> TCPConnection: 发送步骤变更通知
-    TCPConnection -> LabLink: 接收通知
+    TCPConnection -> LabLink: _handle_received_message(data)
     LabLink -> Protocol: 反序列化通知
     Protocol --> LabLink: 返回消息内容
-    LabLink -> Experiment: handle_exp_step_changed(step)
+    LabLink -> LabLink: 从exp_handler_map查找对应处理函数
+    LabLink -> Experiment: handle_exp_step_changed(data)
     Experiment -> Experiment: 更新当前步骤
     
     Server -> TCPConnection: 发送实验数据更新
-    TCPConnection -> LabLink: 接收数据
+    TCPConnection -> LabLink: _handle_received_message(data)
     LabLink -> Protocol: 反序列化数据
     Protocol --> LabLink: 返回消息内容
+    LabLink -> LabLink: 从exp_handler_map查找对应处理函数
     LabLink -> Experiment: handle_exp_data_updated(data)
     Experiment -> Experiment: 处理实验数据
     
-    Server -> TCPConnection: 发送图表数据开始更新
-    TCPConnection -> LabLink: 接收通知
-    LabLink -> Protocol: 反序列化通知
-    Protocol --> LabLink: 返回消息内容
-    LabLink -> Experiment: handle_exp_chart_data_updated_started(data)
-    Experiment -> Experiment: 准备接收图表数据
-    
-    Server -> TCPConnection: 发送图表数据
-    TCPConnection -> LabLink: 接收数据
+    Server -> TCPConnection: 发送图表数据更新(开始、数据、结束)
+    TCPConnection -> LabLink: _handle_received_message(data)
     LabLink -> Protocol: 反序列化数据
     Protocol --> LabLink: 返回消息内容
-    LabLink -> Experiment: handle_exp_chart_data_updated(data)
-    Experiment -> Experiment: 处理图表数据
-    
-    Server -> TCPConnection: 发送图表数据更新完成
-    TCPConnection -> LabLink: 接收通知
-    LabLink -> Protocol: 反序列化通知
-    Protocol --> LabLink: 返回消息内容
-    LabLink -> Experiment: handle_exp_chart_data_updated_finished(data)
-    Experiment -> Experiment: 完成图表数据处理
+    LabLink -> LabLink: 从exp_handler_map查找对应处理函数
+    LabLink -> Experiment: 处理图表数据
+    Experiment -> Experiment: 更新图表数据
 end
 
 note right of Server
@@ -171,11 +174,12 @@ note right of Server
 end note
 
 Server -> TCPConnection: 发送实验完成通知
-TCPConnection -> LabLink: 接收通知
+TCPConnection -> LabLink: _handle_received_message(data)
 LabLink -> Protocol: 反序列化通知
 Protocol --> LabLink: 返回消息内容
+LabLink -> LabLink: 从exp_handler_map查找对应处理函数
 LabLink -> Experiment: handle_exp_finished(data)
-Experiment -> Experiment: 更新实验状态为已完成
+Experiment -> Experiment: 更新实验状态为COMPLETED
 Experiment -> Experiment: 处理最终结果数据
 
 == 等待实验完成 ==
@@ -199,15 +203,16 @@ LabLink --> Client: 返回实验结果
 == 断开连接阶段 ==
 
 Client -> LabLink: disconnect()
+LabLink -> LabLink: logout()
 LabLink -> Protocol: 序列化登出消息
 Protocol --> LabLink: 返回序列化后的消息
 LabLink -> TCPConnection: 发送登出请求
 TCPConnection -> Server: 发送登出消息
 Server --> TCPConnection: 返回登出响应
-TCPConnection -> LabLink: 接收登出响应
-
-LabLink -> Heartbeat: 停止心跳
-deactivate Heartbeat
+TCPConnection -> LabLink: _handle_received_message(data)
+LabLink -> Protocol: 反序列化响应
+Protocol --> LabLink: 返回消息内容
+LabLink -> LabLink: _handle_user_logout_res(data)
 
 LabLink -> TCPConnection: disconnect()
 TCPConnection -> Server: 断开连接
@@ -216,7 +221,7 @@ deactivate Server
 TCPConnection --> LabLink: 断开连接完成
 deactivate TCPConnection
 
-LabLink -> ExperimentManager: 注销实验
+LabLink -> ExperimentManager: deregister_experiment()
 ExperimentManager -> Experiment: 清理实验资源
 deactivate Experiment
 deactivate ExperimentManager
@@ -224,4 +229,4 @@ deactivate Device
 deactivate Protocol
 deactivate LabLink
 
-@enduml 
+@enduml

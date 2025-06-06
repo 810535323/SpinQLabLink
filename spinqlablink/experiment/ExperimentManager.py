@@ -40,6 +40,7 @@ class ExperimentManager:
             ExperimentType.QUANTUM_DECOHERENCE_T2: ('spinqlablink.experiment.exp_decot2', 'ExpT2', 'ExpT2Parameters'),
             ExperimentType.QUANTUM_CONTROL: ('spinqlablink.experiment.exp_qcontrol', 'ExpQControl', 'ExpQControlParameters'),
             ExperimentType.QUANTUM_SYSTEM_INITIALIZATION: ('spinqlablink.experiment.exp_sysinit', 'ExpSysInit', 'ExpSysInitParameters'),
+            ExperimentType.QUANTUM_GATES_AND_CIRCUIT: ('spinqlablink.experiment.exp_qcircuit', 'ExpQCircuit', 'ExpQCircuitParameters'),
             ExperimentType.SPIN_ECHO: ('spinqlablink.experiment.exp_spinecho', 'ExpSpinecho', 'ExpSpinechoParameters'),
         }
         self.current_experiment = None

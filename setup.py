@@ -44,10 +44,5 @@ setup(
         "pydantic>=2.0.0",
         "protobuf>=3.19.0"
     ],
-    keywords="quantum computing, remote experiments, spinq lab",
-    # entry_points={
-    #     'console_scripts': [
-    #         'spinqlablink=src.cli:main',
-    #     ],
-    # },
+    keywords="quantum computing, remote experiments, spinq lab"
 ) 

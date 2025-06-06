@@ -18,88 +18,34 @@ skinparam TitleFontStyle bold
 title 实验通信框架库结构图
 
 package "SpinQPie_Client" {
-    package "src" {
+    package "spinqlablink" {
         class SpinQLabLink {
             - connection: TCPConnection
             - protocol: Protocol
             - expMgr: ExperimentManager
             - device: Device
-            - heartbeat_manager: HeartbeatManager
             - handler_map: Dict
             - exp_handler_map: Dict
-            - is_connected: bool
-            - is_logged_in: bool
-            - hardware_connected: bool
-            - session_id: str
             
-            + __init__(host: str, port: int, account: str, password: str)
             + connect(): bool
             + disconnect(): bool
-            + wait_for_login(timeout: int): bool
-            + get_connection(): bool
-            + get_expMgr(): ExperimentManager
             + register_experiment(experiment_type: ExperimentType): Tuple[Experiment, ExperimentParameter]
-            + get_experiment_status(): ExperimentState
-            + get_experiment_result(): Dict
             + run_experiment(): void
-            + wait_for_experiment_completion(): void
-            
-            - _send_message(msg_id: str, data: dict)
-            - _handle_received_message(data: bytes)
-            - _pack_metadata(): Dict
-            - _login()
-            - _logout()
-            - _on_heartbeat_timeout()
-            - _handle_*(): 消息处理函数集合
+            + wait_for_experiment_completion(): bool
+            + get_experiment_result(): Dict
         }
 
         package "connection" {
             class TCPConnection {
-                - host: str
-                - port: int
-                - timeout: float
-                - socket: socket
-                - connected: bool
-                - buffer_size: int
-                - _send_queue: queue.Queue
-                - _message_callback: Callable
-                
-                + __init__(host: str, port: int, timeout: float)
                 + connect(): bool
-                + disconnect(): void
-                + send(data: bytes): void
-                + is_connected(): bool
+                + disconnect(): bool
+                + send(data: bytes): bool
                 + set_message_callback(callback: Callable): void
-                
-                - _start_threads(): void
-                - _wait_threads_end(): void
-                - _clear_queues(): void
-                - _send_worker(): void
-                - _recv_worker(): void
-                - _handle_received_message(data: bytes): void
             }
             
             class Protocol {
-                + serialize_message(msg_id: str, metadata: dict, data: dict): bytes
+                + serialize_message(msg_id: str, metadata: dict, json_data: dict): bytes
                 + deserialize_message(data: bytes): Tuple[bool, dict]
-            }
-            
-            class HeartbeatManager {
-                - _send_func: Callable
-                - _timeout_callback: Callable
-                - _heartbeat_thread: Thread
-                - _running: bool
-                - _lock: Lock
-                - _last_heartbeat_time: float
-                
-                + __init__(send_func: Callable)
-                + start(): void
-                + stop(): void
-                + set_timeout_callback(callback: Callable): void
-                + on_heartbeat_response(): void
-                
-                - _heartbeat_worker(): void
-                - _check_timeout(): void
             }
         }
 
@@ -109,102 +55,58 @@ package "SpinQPie_Client" {
                 - device_type: str
                 - device_params: dict
                 
-                + __init__(device_id: str, device_type: str, device_params: dict)
                 + set_device_params(device_params: dict): void
-                + set_lock_data_post(lock_data_post: dict): void
             }
         }
 
         package "experiment" {
             class ExperimentManager {
-                - EXPERIMENT_TYPE_MAP: Dict
                 - current_experiment: Experiment
                 - current_experiment_params: ExperimentParameter
                 
-                + __init__()
                 + register_experiment(experiment_type: ExperimentType, handler_map: dict): Tuple[Experiment, ExperimentParameter]
-                + deregister_experiment(): void
                 + get_experiment_parameter(): Dict
-                + wait_for_experiment_completion(): void
+                + wait_for_experiment_completion(): bool
                 + get_experiment_result(): Dict
-                
-                - _get_experiment_class(experiment_type: ExperimentType): Tuple[Type, Type]
             }
 
             abstract class Experiment {
-                - experiment_type: str
                 - id: str
-                - name: str
-                - step: str
                 - state: str
-                - created_at: int
-                - started_at: int
-                - completed_at: int
                 - parameters: ExperimentParameter
                 - result: ExperimentResult
                 
-                + __init__(parameters: ExperimentParameter)
                 + register_handler(handler_map: dict): void
-                
-                {abstract} + handle_exp_added(data: Dict): void
                 {abstract} + get_experiment_parameter(): Dict
+                {abstract} + handle_exp_added(data: Dict): void
                 {abstract} + handle_exp_started(data: Dict): void
-                {abstract} + handle_exp_terminated(data: Dict): void
-                {abstract} + handle_exp_removed(data: Dict): void
-                {abstract} + handle_exp_step_changed(step: int): void
-                {abstract} + handle_exp_data_updated(data: Dict): void
-                {abstract} + handle_exp_chart_data_updated_started(data: Dict): void
-                {abstract} + handle_exp_chart_data_updated(data: Dict): void
-                {abstract} + handle_exp_chart_data_updated_finished(data: Dict): void
                 {abstract} + handle_exp_finished(data: Dict): void
-                {abstract} + get_status(): ExperimentState
-                {abstract} + get_result(): ExperimentResult
+                {abstract} + get_status(): str
+                {abstract} + get_result(): Dict
             }
 
             abstract class ExperimentParameter {
                 {abstract} + get_parameters(): Dict
-                # _validate_pulse_json(s: str): bool
             }
 
             class ExperimentResult {
-                {abstract} + append_graph(lines: Dict): void
                 {abstract} + get_result(): Dict
             }
 
-            enum ExperimentState {
-                INITIALIZED
-                PENDING
-                RUNNING
-                COMPLETED
-                FAILED
+            class ExperimentState {
+                + PENDING: str
+                + RUNNING: str
+                + COMPLETED: str
+                + FAILED: str
             }
             
-            class Gate {
-                + angle: float
-                + controlQubit: int
-                + controlQubit2: int
-                + delay: int
-                + qubitIndex: int
-                + timeslot: int
-                + type: str
-                
-                + __init__(angle, controlQubit, controlQubit2, delay, qubitIndex, type)
+            class "各种实验类" as ExpTypes {
+                ExpPulse, ExpRabi, ExpQubit, 
+                ExpT1, ExpT2, ExpQControl等
             }
             
-            class ExpPulse {
-                + 继承Experiment接口实现
-            }
-            
-            class ExpRabi {
-                + 继承Experiment接口实现
-            }
-            
-            class ExpPulseParameters {
-                + 继承ExperimentParameter接口实现
-            }
-            
-            class ExpRabiParameters {
-                + 继承ExperimentParameter接口实现
+            class "各种实验参数类" as ExpParamTypes {
+                ExpPulseParameters, ExpRabiParameters等
             }
         }
 
@@ -213,14 +115,12 @@ package "SpinQPie_Client" {
                 + {static} get_logger(name: str): Logger
             }
             
-            class "exceptions" {
-                + ConnectionError
-                + TimeoutError
+            class MachineType {
+                + 各种消息类型常量
             }
             
-            class "types" {
-                + ExperimentType
-                + MachineType
+            class ExperimentType {
+                + 各种实验类型常量
             }
         }
     }
@@ -231,27 +131,21 @@ SpinQLabLink --> TCPConnection: 使用
 SpinQLabLink --> Protocol: 使用
 SpinQLabLink --> Device: 管理
 SpinQLabLink --> ExperimentManager: 管理
-SpinQLabLink --> HeartbeatManager: 使用
-
-TCPConnection ..> LoggerManager: 使用
-HeartbeatManager ..> TCPConnection: 通过回调使用
+SpinQLabLink ..> MachineType: 使用
 
 ExperimentManager --> Experiment: 创建
 ExperimentManager --> ExperimentParameter: 创建
+ExperimentManager ..> ExperimentType: 使用
 
 Experiment --> ExperimentParameter: 包含
 Experiment --> ExperimentResult: 包含
-Experiment --> ExperimentState: 使用
-Experiment --> Gate: 可使用
+Experiment ..> ExperimentState: 使用
+Experiment ..> MachineType: 使用
 
-ExperimentManager ..> ExpPulse: 创建
-ExperimentManager ..> ExpRabi: 创建
-ExperimentManager ..> ExpPulseParameters: 创建
-ExperimentManager ..> ExpRabiParameters: 创建
+ExperimentManager ..> ExpTypes: 创建
+ExperimentManager ..> ExpParamTypes: 创建
 
-ExpPulse -up-|> Experiment: 继承
-ExpRabi -up-|> Experiment: 继承
-ExpPulseParameters -up-|> ExperimentParameter: 继承
-ExpRabiParameters -up-|> ExperimentParameter: 继承
+ExpTypes -up-|> Experiment: 继承
+ExpParamTypes -up-|> ExperimentParameter: 继承
 
 @enduml 

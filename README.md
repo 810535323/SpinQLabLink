@@ -1,6 +1,6 @@
 # SpinQLabLink
 
-SpinQLabLink是一个Python库，用于与SpinQ量子计算实验平台进行交互。它提供了一套简单的API，允许用户启动实验、上传数据、获取实验结果等。
+SpinQLabLink是一个Python库，用于与SpinQ量子计算实验平台进行交互。它提供了一套简单的API，允许用户连接设备、注册实验、设置参数、运行实验并获取结果。
 
 ## 安装
 
@@ -27,50 +27,15 @@ pip install .
 pip install -e .
 ```
 
-## 使用方法
+## 快速入门
 
-### 使用Python API
-
-```python
-from spinqlablink import api
-
-# 启动实验
-experiment_id = "exp-001"
-experiment_type = "circuit"
-config = {
-    "circuit": {...},
-    "shots": 1000,
-    # 其他配置
-}
-
-success = api.start_experiment(
-    experiment_id=experiment_id,
-    experiment_type=experiment_type,
-    config=config
-)
-
-# 上传数据
-data = {...}  # 实验数据
-api.upload_experiment_data(experiment_id, data)
-
-# 结束实验
-api.finish_experiment(experiment_id, status="completed")
-
-# 获取结果
-result = api.get_experiment_result(experiment_id)
-print(f"实验结果: {result}")
-```
-
-### 直接使用SpinQLabLink类
-
-对于需要更细粒度控制的场景，可以直接使用`SpinQLabLink`类：
+下面是一个简单的使用示例，演示如何连接设备并运行一个NMR脉冲实验：
 
 ```python
-from spinqlablink import SpinQLabLink
-from utils.types import ExperimentType
+from spinqlablink import SpinQLabLink, ExperimentType, Pulse
 
 # 创建连接
-spinqlablink = SpinQLabLink("192.168.9.92", 8181, "username", "password")
+spinqlablink = SpinQLabLink("192.168.9.121", 8181, "username", "password")
 spinqlablink.connect()
 
 # 等待登录完成
@@ -78,14 +43,18 @@ if not spinqlablink.wait_for_login():
     print("登录失败")
     exit(1)
 
-# 注册实验
-experiment, experiment_params = spinqlablink.register_experiment(ExperimentType.RABI_OSCILLATIONS)
+# 注册NMR脉冲实验
+_, exp_pulse_para = spinqlablink.register_experiment(ExperimentType.NMR_PHENOMENON_AND_SIGNAL)
 
-# 设置实验参数
-experiment_params.freq_h = 37.852105  # 氢共振频率 (MHz)
-experiment_params.freq_p = 15.322872  # 磷共振频率 (MHz)
-experiment_params.makePps = False     # 生成 PPS 信号
-experiment_params.samplePath = 0      # 采样路径：0=氢通道，1=磷通道
+# 设置脉冲参数
+exp_pulse_para.pulses = [Pulse(path=0, width=40, amplitude=100, phase=90, detuning=0)]
+
+# 设置其他参数
+exp_pulse_para.freq_h = 37.852105  # 氢共振频率 (MHz)
+exp_pulse_para.freq_p = 15.322872  # 磷共振频率 (MHz)
+exp_pulse_para.makePps = True      # 生成PPS信号
+exp_pulse_para.samplePath = 0      # 采样路径：0=氢通道，1=磷通道
+exp_pulse_para.custom_freq = False # 使用设备的锁场频率
 
 # 运行实验
 spinqlablink.run_experiment()
@@ -98,57 +67,20 @@ exp_info = spinqlablink.get_experiment_result()
 
 # 断开连接
 spinqlablink.disconnect()
+
+# 显示结果图表
+from examples.toolsfunc import print_graph
+print_graph(exp_info["result"])
 ```
 
-### 使用命令行
+## 实验类型
 
-安装后，可以使用命令行工具`spinqlablink`进行操作：
-
-```bash
-# 启动实验
-spinqlablink start --type circuit --config config.json
-
-# 上传数据
-spinqlablink upload --id exp-001 --data data.json
-
-# 结束实验
-spinqlablink finish --id exp-001 --status completed
-
-# 获取结果
-spinqlablink result --id exp-001 --format json --output result.json
-
-# 获取状态
-spinqlablink status --id exp-001
-
-# 获取实验列表
-spinqlablink list --limit 10 --offset 0
-```
-
-## 日志配置
-
-可以通过以下方式配置日志：
+SpinQLabLink支持多种量子计算实验类型，通过`ExperimentType`枚举类提供：
 
 ```python
-from spinqlablink.utils import setup_default_logger
+from spinqlablink import ExperimentType
 
-# 设置日志级别和日志目录
-logger = setup_default_logger(log_level='debug', log_dir='logs')
-
-# 直接使用导出的日志函数
-from spinqlablink.utils import info, error
-
-info("这是一条信息日志")
-error("这是一条错误日志")
-```
-
-## 支持的实验类型
-
-SpinQLabLink支持多种量子计算实验类型，可以通过`ExperimentType`枚举类使用：
-
-```python
-from utils.types import ExperimentType
-
-# 模块一实验
+# 基础实验
 ExperimentType.NMR_PHENOMENON_AND_SIGNAL  # NMR现象与信号
 ExperimentType.RABI_OSCILLATIONS          # 拉比振荡
 ExperimentType.QUANTUM_BIT                # 量子比特
@@ -156,169 +88,302 @@ ExperimentType.QUANTUM_DECOHERENCE_T1     # 量子退相干T1
 ExperimentType.QUANTUM_DECOHERENCE_T2     # 量子退相干T2
 ExperimentType.QUANTUM_CONTROL            # 量子控制
 ExperimentType.QUANTUM_SYSTEM_INITIALIZATION  # 量子系统初始化
-ExperimentType.QUANTUM_GATES_AND_CIRCUIT_PULSE    # 量子门与电路 (脉冲模式)
-ExperimentType.QUANTUM_GATES_AND_CIRCUIT_CIRCUIT  # 量子门与电路 (电路模式)
-ExperimentType.QUANTUM_STATE_TOMOGRAPHY           # 量子态层析
+ExperimentType.QUANTUM_GATES_AND_CIRCUIT  # 量子门与电路
+ExperimentType.SPIN_ECHO                  # 自旋回波
 
-# 模块二实验
-ExperimentType.QUANTUM_COMPUTING_TASK      # 量子计算任务
-ExperimentType.INTRODUCTION_TO_QUANTUM_COMPUTING  # 量子计算导论
-ExperimentType.DEUTSCH_ALGORITHM           # Deutsch算法
-ExperimentType.BERNSTEIN_VARIRANI_ALGORITHM  # Bernstein-Varirani算法
-ExperimentType.GROVER_ALGORITHM            # Grover算法
-ExperimentType.QFT_ALGORITHM               # 量子傅里叶变换
-ExperimentType.HHL_ALGORITHM               # HHL算法
-ExperimentType.VQE_ALGORITHM               # 变分量子特征求解器
-ExperimentType.QAOA_ALGORITHM              # 量子近似优化算法
-
-# 模块三实验
-ExperimentType.SPIN_ECHO                   # 自旋回波
-ExperimentType.DYNAMIC_DECOUPLING          # 动态解耦
-ExperimentType.SHAPE_PULSE                 # 形状脉冲
-ExperimentType.NUMERICAL_OPTIMIZATION_PULSE  # 数值优化脉冲
-
-# 模块四实验
-ExperimentType.PHYSICAL_LAYER_EXPERIMENT         # 物理层实验
-ExperimentType.CIRCUIT_LAYER_EXPERIMENT_PULSE    # 电路层实验 (脉冲模式)
-ExperimentType.CIRCUIT_LAYER_EXPERIMENT_CIRCUIT  # 电路层实验 (电路模式)
+# 其他高级实验类型请参考文档
 ```
 
-## 实验参数配置
+## 实验示例
 
-不同类型的实验需要不同的参数配置。以下是一些常见实验的参数示例：
+### 示例1：拉比振荡实验
 
-### Rabi振荡实验参数
+拉比振荡实验用于确定π/2和π脉冲宽度，这是量子门操作的基础：
 
 ```python
-# 注册Rabi振荡实验
-rabi, rabi_para = spinqlablink.register_experiment(ExperimentType.RABI_OSCILLATIONS)
+from spinqlablink import SpinQLabLink, ExperimentType, Pulse
+import time
+import numpy as np
+from scipy.optimize import curve_fit
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtWidgets
 
-# 设置磷脉冲序列
-import json
-rabi_para.set_pulse(json.dumps({
-    "hPulse": [{"width": 30, "am": 100, "phase": 90, "freshift": 0}],
-    "pPulse": []
-}))
+# 创建连接
+spinqlablink = SpinQLabLink("192.168.9.121", 8181, "anyword", "anyword")
+spinqlablink.connect()
+spinqlablink.wait_for_login()
 
-# 设置频率和采样参数
-rabi_para.freq_h = 37.852105  # 氢共振频率 (MHz)
-rabi_para.freq_p = 15.322872  # 磷共振频率 (MHz)
-rabi_para.makePps = False     # 生成 PPS 信号
-rabi_para.samplePath = 0      # 采样路径：0=氢通道，1=磷通道
-rabi_para.custom_freq = False # 使用自定义频率
+width_real_map = {}
+width_list = [i * 40 for i in range(10)]  # 测试不同宽度的脉冲
+
+# 对每个脉冲宽度运行实验
+for width in width_list:
+    _, exp_pulse_para = spinqlablink.register_experiment(ExperimentType.RABI_OSCILLATIONS)
+    exp_pulse_para.freq_h = 37.852105
+    exp_pulse_para.freq_p = 15.322872
+    exp_pulse_para.makePps = True
+    exp_pulse_para.samplePath = 0
+    exp_pulse_para.custom_freq = False
+    
+    # 设置脉冲宽度
+    exp_pulse_para.pulses = [Pulse(path=0, width=width, amplitude=100, phase=90, detuning=0)]
+    
+    # 运行实验并获取结果
+    spinqlablink.run_experiment()
+    spinqlablink.wait_for_experiment_completion()
+    exp_info = spinqlablink.get_experiment_result()
+    width_real_map[width] = exp_info["result"]["real"]
+    
+    # 注销实验
+    spinqlablink.deregister_experiment()
+    time.sleep(10)  # 等待系统稳定
+
+# 断开连接
+spinqlablink.disconnect()
+
+# 绘制结果曲线，拟合正弦函数获取π脉冲宽度
+# (详细代码请参考examples/part1/exp_rabi_example.py)
 ```
 
-### NMR现象与信号实验参数
+### 示例2：量子门与电路实验
+
+可以使用基本脉冲或预定义的量子门来构建量子电路：
 
 ```python
-# 注册NMR实验
-nmr, nmr_para = spinqlablink.register_experiment(ExperimentType.NMR_PHENOMENON_AND_SIGNAL)
+from spinqlablink import SpinQLabLink, ExperimentType, Pulse, Gate, CustomGate, Circuit
 
-# 设置脉冲参数
-nmr_para.set_pulse(json.dumps({
-    "hPulse": [{"width": 20, "am": 100, "phase": 0, "freshift": 0}],
-    "pPulse": []
-}))
+# 创建连接
+spinqlablink = SpinQLabLink("192.168.9.121", 8181, "anyword", "anyword")
+spinqlablink.connect()
+spinqlablink.wait_for_login()
+
+# 注册量子门与电路实验
+exp, exp_para = spinqlablink.register_experiment(ExperimentType.QUANTUM_GATES_AND_CIRCUIT)
+
+# 设置实验模式 - 可以使用脉冲模式或门电路模式
+using_pulse = False
+exp_para.using_pulse = using_pulse
+exp_para.samplePath = -1  # -1表示所有通道
+
+if not using_pulse:
+    # 使用量子门模式
+    exp_para.using_custom_gate = False
+    
+    # 创建电路
+    circuit = Circuit(2)  # 2量子比特电路
+    circuit << Gate(type='H', qubitIndex=0)  # Hadamard门
+    circuit << Gate(type='CNOT', qubitIndex=1, controlQubit=0)  # CNOT门
+    circuit.print_circuit()  # 打印电路
+    
+    # 设置电路
+    exp_para.set_circuit(circuit)
+else:
+    # 使用脉冲模式
+    exp_para.pulses = [Pulse(path=0, phase=90, amplitude=100, width=40)]
+
+# 运行实验
+spinqlablink.run_experiment()
+spinqlablink.wait_for_experiment_completion()
+exp_info = spinqlablink.get_experiment_result()
+
+# 处理结果
+exp_result = exp_info["result"]
+for key, value in exp_result.items():
+    if key != "graph":
+        print(f"{key}: {value}")
+
+# 显示图表
+from examples.toolsfunc import print_graph
+print_graph(exp_info["result"])
+```
+
+### 示例3：从文件加载脉冲序列
+
+SpinQLabLink支持从.spinq文件中加载预定义的脉冲序列：
+
+```python
+from spinqlablink import SpinQLabLink, ExperimentType, Pulse
+from examples.toolsfunc import parse_spinq_file
+
+# 创建连接
+spinqlablink = SpinQLabLink("192.168.9.121", 8181, "anyword", "anyword")
+spinqlablink.connect()
+spinqlablink.wait_for_login()
+
+# 注册实验
+_, exp_para = spinqlablink.register_experiment(ExperimentType.NMR_PHENOMENON_AND_SIGNAL)
+
+# 从文件加载脉冲序列
+pulses = []
+parse_spinq_file(pulses, "examples/part1/lab_file.spinq")
+exp_para.pulses = pulses
 
 # 设置其他参数
-nmr_para.freq_h = 37.852105   # 氢共振频率
-nmr_para.freq_p = 15.322872   # 磷共振频率
-nmr_para.samplePath = 0       # 采样路径
+exp_para.freq_h = 37.852105
+exp_para.freq_p = 15.322872
+exp_para.makePps = True
+exp_para.samplePath = 0
+exp_para.custom_freq = False
+
+# 运行实验
+spinqlablink.run_experiment()
+spinqlablink.wait_for_experiment_completion()
+exp_info = spinqlablink.get_experiment_result()
+
+# 断开连接
+spinqlablink.disconnect()
+
+# 显示结果
+from examples.toolsfunc import print_graph
+print_graph(exp_info["result"])
 ```
 
-## 连接管理
+## 核心类和方法
 
-SpinQLabLink提供了完善的连接管理功能：
+### SpinQLabLink
+
+主要接口类，管理与设备的连接和实验执行。
 
 ```python
 # 创建连接
 spinqlablink = SpinQLabLink(host, port, account, password)
 
-# 连接到服务器
+# 连接设备
 spinqlablink.connect()
 
-# 等待登录完成 (可设置超时时间，单位为秒)
+# 等待登录完成
 spinqlablink.wait_for_login(timeout=10)
 
-# 检查连接状态
-is_connected = spinqlablink.get_connection()
+# 注册实验
+experiment, experiment_params = spinqlablink.register_experiment(ExperimentType.XXX)
 
-# 登出并断开连接
-spinqlablink.logout()
+# 运行实验
+spinqlablink.run_experiment()
+
+# 等待实验完成
+spinqlablink.wait_for_experiment_completion()
+
+# 获取实验结果
+results = spinqlablink.get_experiment_result()
+
+# 注销实验
+spinqlablink.deregister_experiment()
+
+# 断开连接
 spinqlablink.disconnect()
 ```
 
-## 命令行帮助
+### Pulse 类
 
-```bash
-spinqlablink --help
+定义单个量子脉冲的参数。
+
+```python
+# 创建一个脉冲
+pulse = Pulse(
+    path=0,          # 通道: 0=氢, 1=磷
+    width=40,        # 脉冲宽度 (纳秒)
+    amplitude=100,   # 振幅 (百分比)
+    phase=90,        # 相位 (度)
+    detuning=0       # 频率偏移 (Hz)
+)
 ```
+
+### Circuit 和 Gate 类
+
+用于构建量子电路。
+
+```python
+# 创建电路
+circuit = Circuit(2)  # 2量子比特电路
+
+# 添加量子门
+circuit << Gate(type='X', qubitIndex=0)  # X门
+circuit << Gate(type='Y', qubitIndex=1)  # Y门
+circuit << Gate(type='Z', qubitIndex=0)  # Z门
+circuit << Gate(type='H', qubitIndex=1)  # Hadamard门
+circuit << Gate(type='CNOT', qubitIndex=1, controlQubit=0)  # CNOT门
+circuit << Gate(type='SWAP', qubitIndex=0, controlQubit=1)  # SWAP门
+
+# 添加旋转门
+circuit << Gate(type='RX', qubitIndex=0, angle=1.57)  # RX(π/2)
+circuit << Gate(type='RY', qubitIndex=1, angle=3.14)  # RY(π)
+circuit << Gate(type='RZ', qubitIndex=0, angle=0.785)  # RZ(π/4)
+
+# 打印电路
+circuit.print_circuit()
+```
+
+## 实验结果可视化
+
+SpinQLabLink提供了工具函数来可视化实验结果：
+
+```python
+from examples.toolsfunc import print_graph
+
+# 获取实验结果
+exp_info = spinqlablink.get_experiment_result()
+
+# 显示结果图表
+print_graph(exp_info["result"])
+```
+
+这将打开一个交互式图表窗口，显示实验的FID信号和FFT频谱。
+
+## 实验通信框架结构
+
+SpinQLabLink采用了模块化的架构设计，主要包括：
+
+1. **连接管理**：处理TCP连接、协议序列化/反序列化和心跳维护
+2. **设备管理**：管理设备参数和状态
+3. **实验管理**：注册、配置和执行各类量子实验
+4. **消息处理**：处理来自服务器的各类消息和实验数据
+
+详细的架构设计可以参考下图：
+
+![实验通信框架库结构图](实验通信框架库结构图.png)
+
+![实验通信框架业务流程图](实验通信框架业务流程图.png)
+
+## 高级使用
+
+### 自定义量子门
+
+```python
+from spinqlablink import CustomGate
+
+# 创建自定义量子门
+custom_file_json = '{"pulse":[{"amplitude":100.0,"detuning":0.0,"phase":0.0,"width":200.0}]}'
+custom_gate = CustomGate(
+    type='I',               # 基础门类型
+    customType='I_custom',  # 自定义门名称
+    qubitIndex=0,           # 作用量子比特
+    gateJson=custom_file_json  # 定义门的脉冲序列
+)
+
+# 将自定义门添加到电路
+circuit << custom_gate
+```
+
+### 从文件加载脉冲序列
+
+```python
+from examples.toolsfunc import parse_spinq_file
+
+# 加载脉冲序列
+pulses = []
+parse_spinq_file(pulses, "path/to/pulse_file.spinq")
+
+# 设置实验参数
+exp_para.pulses = pulses
+```
+
+## 常见问题解决
+
+1. **连接超时**：检查网络设置和设备IP地址
+2. **登录失败**：验证用户名和密码是否正确
+3. **实验结果异常**：检查实验参数设置，特别是频率和脉冲参数
+4. **心跳断开**：可能是网络不稳定或设备重启，尝试重新连接
 
 ## 许可证
 
 Apache License 2.0
-
-## 实验通信框架库结构图
-
-![实验通信框架库结构图](实验通信框架库结构图.png)
-
-## 实验通信框架业务流程图
-
-![实验通信框架业务流程图](实验通信框架业务流程图.png)
-
-## 开发指南
-
-如果您想要扩展或修改SpinQLabLink，以下是一些指导原则：
-
-### 项目结构
-
-```
-spinqlablink/
-├── src/                      # 源代码目录
-│   ├── __init__.py           # 包初始化
-│   ├── cli.py                # 命令行接口
-│   ├── spinqlablink.py       # 主要API实现
-│   ├── connection/           # 连接相关模块
-│   │   ├── connection.py     # 网络连接实现
-│   │   ├── protocol.py       # 通信协议
-│   │   └── heartbeat.py      # 心跳机制
-│   ├── devices/              # 设备相关模块
-│   │   └── device.py         # 设备实现
-│   ├── experiment/           # 实验相关模块
-│   │   ├── experiment_base.py # 实验基类
-│   │   ├── ExperimentManager.py # 实验管理器
-│   │   ├── exp_pulse.py      # 脉冲实验
-│   │   └── exp_rabi.py       # Rabi实验
-│   └── utils/                # 工具模块
-│       ├── logger.py         # 日志工具
-│       ├── types.py          # 类型定义
-│       └── exceptions.py     # 异常定义
-├── examples/                 # 示例代码
-└── setup.py                  # 安装配置
-```
-
-## 贡献指南
-
-我们欢迎各种形式的贡献，包括但不限于：
-
-- 报告问题
-- 提交功能请求
-- 提交代码改进
-- 改进文档
-
-### 代码规范
-
-- 遵循PEP 8代码风格
-- 为所有新函数和类添加文档字符串
-- 添加适当的测试
-- 确保所有测试通过
-
-### 问题报告
-
-如果您发现问题，请通过GitHub Issues报告，并包含以下信息：
-
-- 问题描述
-- 重现步骤
-- 预期行为
-- 实际行为
-- 环境信息（操作系统、Python版本等）

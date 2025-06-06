@@ -18,6 +18,7 @@ Initialize utils module.
 from .types import ExperimentType as ExperimentType
 from .pulse import Pulse as Pulse
 from .gate import Gate as Gate
+from .circuit import Circuit as Circuit
 from .logger import (
     LoggerManager, 
     setup_default_logger, 

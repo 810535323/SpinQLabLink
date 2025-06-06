@@ -15,6 +15,8 @@
 from .spinqlablink import SpinQLabLink
 from .utils.types import ExperimentType as ExperimentType
 from .utils.pulse import Pulse as Pulse
+from .utils.gate import *
+from .utils.circuit import Circuit as Circuit
 from .utils import *
 from .connection import *
 from .devices import *
