@@ -13,14 +13,15 @@
 # limitations under the License.
 
 """
-NMR Experiment Module
+Quantum Bit Experiment Module
 
-Provides Nuclear Magnetic Resonance experiment functionality
+Provides Quantum Bit experiment functionality
 """
 
 from typing import Dict, Any, List
 import time
 import json
+import math
 
 from ..experiment.experiment_base import Experiment, ExperimentParameter, ExperimentResult, ExperimentState
 from ..utils import LoggerManager
@@ -29,15 +30,13 @@ from ..utils.pulse import Pulse
 from pydantic import Field
 
 # Create logger
-logger = LoggerManager.get_logger(name='exp_decot2')
+logger = LoggerManager.get_logger(name='exp_qubit')
 
-class ExpT2Result(ExperimentResult):
-    """T2 Experiment Result Class"""
+class ExpQubitResult(ExperimentResult):
+    """Quantum Bit Experiment Result Class"""
     def __init__(self):
         super().__init__()
         self.graph = []
-        self.width = 0
-        self.mod = 0
         self.coordinate = {}
         self.matrix = {}
         self.module = []
@@ -50,21 +49,20 @@ class ExpT2Result(ExperimentResult):
         """Get experiment result"""
         return {
             "graph": self.graph,
-            "width": self.width,
-            "mod": self.mod,
             "coordinate": self.coordinate,
             "matrix": self.matrix,
             "module": self.module
         }
 
-class ExpT2Parameters(ExperimentParameter):
-    """T2 Experiment Parameters Class"""
+class ExpQubitParameters(ExperimentParameter):
+    """Quantum Bit Experiment Parameters Class"""
     pulses: List[Pulse] = Field(default=[], description="Pulse sequence")
     freq_h: float = Field(default=27.0, gt=0, lt=100, description="Hydrogen resonance frequency (MHz)")
     freq_p: float = Field(default=11.0, gt=0, lt=100, description="Phosphorus resonance frequency (MHz)")
-    makePps: bool = Field(default=False, description="Whether to generate PPS signal")
+    makePps: bool = Field(default=True, description="Whether to generate PPS signal")
     samplePath: int = Field(default=0, ge=0, le=1, description="Sampling path selection: 0 for hydrogen channel, 1 for phosphorus channel")
-    custom_freq: bool = Field(default=True, description="Whether to use custom frequency(h_freq or p_freq)")
+    custom_freq: bool = Field(default=False, description="Whether to use custom frequency(h_freq or p_freq)")
+    usingAwgFile: bool = Field(default=False, description="Whether to use AWG file")
 
     def append_pulse(self, pulse: Pulse):
         self.pulses.append(pulse)
@@ -86,30 +84,29 @@ class ExpT2Parameters(ExperimentParameter):
             "freq_h": self.freq_h * 1000000,
             "freq_p": self.freq_p * 1000000,
             "repeat": 0,
-            "makePps": self.makePps,
             "pulse": self._convert_pulse(),
             "samplePath": self.samplePath,
             "sampleQubit": 0,
-            "usingAwgFile": False
+            "usingAwgFile": self.usingAwgFile
         }
 
-class ExpT2(Experiment):
-    """T2 Experiment Class"""
+class ExpQubit(Experiment):
+    """Quantum Bit Experiment Class"""
     
-    def __init__(self, parameters: ExpT2Parameters):
+    def __init__(self, parameters: ExpQubitParameters):
         """
-        Initialize T2 experiment
+        Initialize Quantum Bit experiment
         
         Args:
-            parameters: T2 experiment parameters
+            parameters: Quantum Bit experiment parameters
         """
         super().__init__(parameters)
-        self.experiment_type = ExperimentType.QUANTUM_DECOHERENCE_T2
+        self.experiment_type = ExperimentType.QUANTUM_BIT
         self.name = self.experiment_type + "-" + self.id[:8]
-        self.result = ExpT2Result()
+        self.result = ExpQubitResult()
         self.step_graph = {}
         
-        logger.info(f"Created T2 experiment: {self.name}")
+        logger.info(f"Created Quantum Bit experiment: {self.name}")
 
     def get_experiment_parameter(self) -> Dict[str, Any]:
         """获取实验参数"""
@@ -152,8 +149,6 @@ class ExpT2(Experiment):
         """处理实验数据更新，实现具体实验类型的数据更新处理"""
         if data["taskId"] == self.id:
             logger.debug(f"Experiment data updated: {data}")
-            self.result.width = data["data"]["exp_t2"]["width"]
-            self.result.mod = data["data"]["exp_t2"]["mod"]
 
     def handle_exp_chart_data_updated_started(self, data: Dict[str, Any]) -> None:
         """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
@@ -191,12 +186,12 @@ class ExpT2(Experiment):
             else:
                 self.state = ExperimentState.FAILED
             result = json.loads(data["data"]["parameters"]["result"])
-            self.result.coordinate = result["coordinate"]
             self.result.matrix = {
                 "real": result["real"],
                 "imag": result["imag"]
             }
             self.result.module = result["module"]
+            self.result.coordinate = result["coordinate"]
 
     def get_status(self) -> str:
         """获取实验状态"""

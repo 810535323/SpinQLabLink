@@ -25,11 +25,7 @@ def main():
         _, exp_decot2_para = spinqlablink.register_experiment(ExperimentType.QUANTUM_DECOHERENCE_T2)
 
         # Set other parameters
-        exp_decot2_para.freq_h = 37.852105  # Hydrogen resonance frequency (MHz)
-        exp_decot2_para.freq_p = 15.322872  # Phosphorus resonance frequency (MHz)
-        exp_decot2_para.makePps = True  # Generate PPS signal
         exp_decot2_para.samplePath = 0  # Sampling path: 0=Hydrogen channel, 1=Phosphorus channel
-        exp_decot2_para.custom_freq = False  # Use custom frequency (true: use custom freq_h and freq_p, false: use device's lock field frequency)
         
         exp_decot2_para.pulses = [Pulse(path=0,width=40, amplitude=100, phase=90, detuning=0)
                                 ,Pulse(path=0,width=width/2, amplitude=0, phase=0, detuning=0)
@@ -40,9 +36,9 @@ def main():
         print("Waiting for experiment completion")
         spinqlablink.wait_for_experiment_completion()
 
-        result = spinqlablink.get_experiment_result()
+        exp_info = spinqlablink.get_experiment_result()
 
-        width_mod_map[width] = result["result"]["mod"]
+        width_mod_map[width] = exp_info["result"]["mod"]
 
         spinqlablink.deregister_experiment()
         

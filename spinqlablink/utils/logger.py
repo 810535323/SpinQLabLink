@@ -41,7 +41,7 @@ class LoggerManager:
     _loggers = {}
     
     @classmethod
-    def get_logger(cls, name='spinq', level='info', 
+    def get_logger(cls, name='spinqlablink', level='debug', 
                   log_file=None, max_size=10*1024*1024, backup_count=5,
                   log_format='%(asctime)s [%(levelname)s] %(message)s'):
         """
@@ -139,9 +139,9 @@ def setup_default_logger(log_level='info', log_dir=None):
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
         timestamp = datetime.datetime.now().strftime('%Y%m%d')
-        log_file = os.path.join(log_dir, f'spinq_{timestamp}.log')
+        log_file = os.path.join(log_dir, f'spinqlablink_{timestamp}.log')
     
-    return LoggerManager.get_logger(name='spinq', level=log_level, log_file=log_file)
+    return LoggerManager.get_logger(name='spinqlablink', level=log_level, log_file=log_file)
 
 
 # 创建一个默认日志器，可以直接导入使用

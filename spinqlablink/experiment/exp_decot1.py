@@ -128,15 +128,11 @@ class ExpT1(Experiment):
 
     def handle_exp_added(self, data: Dict[str, Any]) -> None:
         """处理实验添加，实现具体实验类型的添加处理"""
-        try:
-            if data["code"] == 0:
-                self.id = data["taskId"]
-                self.created_at = time.time()
-            else:
-                raise Exception(f"Experiment addition failed: {data}")
-        except Exception as e:
-            logger.error(f"Error processing experiment addition: {e}")
-            raise
+        if data["code"] == 0:
+            self.id = data["taskId"]
+            self.created_at = time.time()
+        else:
+            raise Exception(f"Experiment addition failed: {data}")
 
     def handle_exp_started(self, data: Dict[str, Any]) -> None:
         """处理实验开始，实现具体实验类型的开始处理"""

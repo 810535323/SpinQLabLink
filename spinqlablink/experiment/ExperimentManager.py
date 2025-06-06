@@ -35,8 +35,11 @@ class ExperimentManager:
         self.EXPERIMENT_TYPE_MAP = {
             ExperimentType.NMR_PHENOMENON_AND_SIGNAL: ('spinqlablink.experiment.exp_pulse', 'ExpPulse', 'ExpPulseParameters'),
             ExperimentType.RABI_OSCILLATIONS: ('spinqlablink.experiment.exp_rabi', 'ExpRabi', 'ExpRabiParameters'),
+            ExperimentType.QUANTUM_BIT: ('spinqlablink.experiment.exp_qubit', 'ExpQubit', 'ExpQubitParameters'),
             ExperimentType.QUANTUM_DECOHERENCE_T1: ('spinqlablink.experiment.exp_decot1', 'ExpT1', 'ExpT1Parameters'),
             ExperimentType.QUANTUM_DECOHERENCE_T2: ('spinqlablink.experiment.exp_decot2', 'ExpT2', 'ExpT2Parameters'),
+            ExperimentType.QUANTUM_CONTROL: ('spinqlablink.experiment.exp_qcontrol', 'ExpQControl', 'ExpQControlParameters'),
+            ExperimentType.QUANTUM_SYSTEM_INITIALIZATION: ('spinqlablink.experiment.exp_sysinit', 'ExpSysInit', 'ExpSysInitParameters'),
             ExperimentType.SPIN_ECHO: ('spinqlablink.experiment.exp_spinecho', 'ExpSpinecho', 'ExpSpinechoParameters'),
         }
         self.current_experiment = None
@@ -98,7 +101,8 @@ class ExperimentManager:
 
     def get_experiment_parameter(self):
         if self.current_experiment is None:
-            raise ValueError("No experiment registered")
+            logger.error("No experiment registered")
+            return {}
         return self.current_experiment.get_experiment_parameter()
 
     def wait_for_experiment_completion(self):
@@ -106,18 +110,32 @@ class ExperimentManager:
         等待实验完成
         """
         if self.current_experiment is None:
-            raise ValueError("No experiment registered")
+            logger.error("No experiment registered or experiment was deregistered due to errors")
+            return False
         
-        is_finished = self.current_experiment.get_status() == ExperimentState.COMPLETED \
-            or self.current_experiment.get_status() == ExperimentState.FAILED
-        while(not is_finished):
-            time.sleep(1)
-            is_finished = self.current_experiment.get_status() == ExperimentState.COMPLETED or self.current_experiment.get_status() == ExperimentState.FAILED
+        try:
+            while(True):
+                if self.current_experiment is None:
+                    logger.error("Experiment was deregistered during execution")
+                    return False
+
+                status = self.current_experiment.get_status()
+                if status == ExperimentState.COMPLETED or status == ExperimentState.FAILED:
+                    break
+
+                time.sleep(1)
+            return True
+        except Exception as e:
+            logger.error(f"Error waiting for experiment completion: {e}")
+            self.deregister_experiment()
+            return False
 
     def get_experiment_result(self):
         """
         获取实验结果
         """
         if self.current_experiment is None:
-            raise ValueError("No experiment registered")
+            logger.error("No experiment registered or experiment was deregistered due to errors")
+            return {"result": {}}
+        
         return self.current_experiment.get_result()

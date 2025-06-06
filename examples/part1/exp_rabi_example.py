@@ -38,8 +38,8 @@ def main():
         print("Waiting for experiment completion")
         spinqlablink.wait_for_experiment_completion()
 
-        result = spinqlablink.get_experiment_result()
-        width_real_map[width] = result["result"]["real"]
+        exp_info = spinqlablink.get_experiment_result()
+        width_real_map[width] = exp_info["result"]["real"]
 
         time.sleep(10)
         

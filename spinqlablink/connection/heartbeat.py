@@ -88,7 +88,7 @@ class HeartbeatManager:
         if not self._is_running:
             return
         
-        logger.warn("Stopping heartbeat")
+        logger.debug("Stopping heartbeat")
         
         # 设置停止标志
         self._is_running = False

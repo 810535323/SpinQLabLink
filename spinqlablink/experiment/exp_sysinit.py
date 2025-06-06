@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-NMR Experiment Module
+Quantum Control Experiment Module
 
-Provides Nuclear Magnetic Resonance experiment functionality
+Provides Quantum Control experiment functionality
 """
 
 from typing import Dict, Any, List
@@ -29,16 +29,16 @@ from ..utils.pulse import Pulse
 from pydantic import Field
 
 # Create logger
-logger = LoggerManager.get_logger(name='exp_decot2')
+logger = LoggerManager.get_logger(name='exp_sysinit')
 
-class ExpT2Result(ExperimentResult):
-    """T2 Experiment Result Class"""
+class ExpSysInitResult(ExperimentResult):
+    """Quantum System Initialization Experiment Result Class"""
     def __init__(self):
         super().__init__()
         self.graph = []
-        self.width = 0
-        self.mod = 0
-        self.coordinate = {}
+        self.fidelity = 0
+        self.Hlamda = 0
+        self.Plamda = 0
         self.matrix = {}
         self.module = []
     
@@ -50,21 +50,21 @@ class ExpT2Result(ExperimentResult):
         """Get experiment result"""
         return {
             "graph": self.graph,
-            "width": self.width,
-            "mod": self.mod,
-            "coordinate": self.coordinate,
+            "fidelity": self.fidelity,
+            "Hlamda": self.Hlamda,
+            "Plamda": self.Plamda,
             "matrix": self.matrix,
             "module": self.module
         }
 
-class ExpT2Parameters(ExperimentParameter):
-    """T2 Experiment Parameters Class"""
+class ExpSysInitParameters(ExperimentParameter):
+    """Quantum System Initialization Experiment Parameters Class"""
     pulses: List[Pulse] = Field(default=[], description="Pulse sequence")
     freq_h: float = Field(default=27.0, gt=0, lt=100, description="Hydrogen resonance frequency (MHz)")
     freq_p: float = Field(default=11.0, gt=0, lt=100, description="Phosphorus resonance frequency (MHz)")
-    makePps: bool = Field(default=False, description="Whether to generate PPS signal")
-    samplePath: int = Field(default=0, ge=0, le=1, description="Sampling path selection: 0 for hydrogen channel, 1 for phosphorus channel")
-    custom_freq: bool = Field(default=True, description="Whether to use custom frequency(h_freq or p_freq)")
+    custom_freq: bool = Field(default=False, description="Whether to use custom frequency(h_freq or p_freq)")
+    repeat: int = Field(default=5, ge=0, description="Repeat times")
+    samplePath: int = Field(default=-1, ge=-1, le=-1, description="Sampling path selection: -1 for all channels, 0 for hydrogen channel, 1 for phosphorus channel")
 
     def append_pulse(self, pulse: Pulse):
         self.pulses.append(pulse)
@@ -85,31 +85,28 @@ class ExpT2Parameters(ExperimentParameter):
             "custom_freq": self.custom_freq,
             "freq_h": self.freq_h * 1000000,
             "freq_p": self.freq_p * 1000000,
-            "repeat": 0,
-            "makePps": self.makePps,
+            "repeat": self.repeat,
             "pulse": self._convert_pulse(),
-            "samplePath": self.samplePath,
-            "sampleQubit": 0,
-            "usingAwgFile": False
+            "samplePath": self.samplePath
         }
 
-class ExpT2(Experiment):
-    """T2 Experiment Class"""
+class ExpSysInit(Experiment):
+    """Quantum System Initialization Experiment Class"""
     
-    def __init__(self, parameters: ExpT2Parameters):
+    def __init__(self, parameters: ExpSysInitParameters):
         """
-        Initialize T2 experiment
+        Initialize Quantum System Initialization experiment
         
         Args:
-            parameters: T2 experiment parameters
+            parameters: Quantum System Initialization experiment parameters
         """
         super().__init__(parameters)
-        self.experiment_type = ExperimentType.QUANTUM_DECOHERENCE_T2
+        self.experiment_type = ExperimentType.QUANTUM_SYSTEM_INITIALIZATION
         self.name = self.experiment_type + "-" + self.id[:8]
-        self.result = ExpT2Result()
+        self.result = ExpSysInitResult()
         self.step_graph = {}
         
-        logger.info(f"Created T2 experiment: {self.name}")
+        logger.info(f"Created Quantum System Initialization experiment: {self.name}")
 
     def get_experiment_parameter(self) -> Dict[str, Any]:
         """获取实验参数"""
@@ -152,8 +149,6 @@ class ExpT2(Experiment):
         """处理实验数据更新，实现具体实验类型的数据更新处理"""
         if data["taskId"] == self.id:
             logger.debug(f"Experiment data updated: {data}")
-            self.result.width = data["data"]["exp_t2"]["width"]
-            self.result.mod = data["data"]["exp_t2"]["mod"]
 
     def handle_exp_chart_data_updated_started(self, data: Dict[str, Any]) -> None:
         """处理实验图表数据更新，实现具体实验类型的图表数据更新处理"""
@@ -184,19 +179,23 @@ class ExpT2(Experiment):
     def handle_exp_finished(self, data: Dict[str, Any]) -> None:
         """处理实验结束，实现具体实验类型的结束处理"""
         logger.info(f"Experiment finished:{self.name}")
+        logger.debug(f"Experiment finished data:{data}")
         if data["taskId"] == self.id:
             self.completed_at = time.time()
             if data["data"]["isTerminated"] == False:
                 self.state = ExperimentState.COMPLETED
             else:
                 self.state = ExperimentState.FAILED
-            result = json.loads(data["data"]["parameters"]["result"])
-            self.result.coordinate = result["coordinate"]
+            parameters = data["data"]["parameters"]
+            self.result.Hlamda = parameters["Hlamda"]
+            self.result.Plamda = parameters["Plamda"]
+            result = json.loads(parameters["result"])
             self.result.matrix = {
                 "real": result["real"],
                 "imag": result["imag"]
             }
             self.result.module = result["module"]
+            self.result.fidelity = result["fidelity"]
 
     def get_status(self) -> str:
         """获取实验状态"""

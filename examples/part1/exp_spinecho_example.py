@@ -1,6 +1,7 @@
-from spinqlablink import SpinQLabLink, ExperimentType
+from spinqlablink import SpinQLabLink, ExperimentType, Pulse
 
-from toolsfunc import print_graph, parse_spinq_file
+from ..toolsfunc import print_graph
+
 def main():
     # Create connection
     spinqlablink = SpinQLabLink("192.168.9.121", 8181, "anyword", "anyword")
@@ -10,11 +11,11 @@ def main():
         print("Login failed")
         return
     
-    # Register spinecho experiment
+    # Register NMR experiment
     _, exp_pulse_para = spinqlablink.register_experiment(ExperimentType.SPIN_ECHO)
     
-    parse_spinq_file(exp_pulse_para.pulses,"./examples/lab_file.spinq")
-
+    exp_pulse_para.pulses = [Pulse(path=0,width=40, amplitude=100, phase=90, detuning=0)]
+    
     # Set other parameters
     exp_pulse_para.sampleCount = 16000  # Sample count
     exp_pulse_para.sampleFre = 10000  # Sample frequency
@@ -24,16 +25,16 @@ def main():
     exp_pulse_para.h_freDemo = 0  # Hydrogen frequency demo
     exp_pulse_para.p_freDemo = 0  # Phosphorus frequency demo
     exp_pulse_para.samplePath = 0  # Sampling path: 0=Hydrogen channel, 1=Phosphorus channel
-
+    
     spinqlablink.run_experiment()
     print("Waiting for experiment completion")
     spinqlablink.wait_for_experiment_completion()
 
-    result = spinqlablink.get_experiment_result()
+    exp_info = spinqlablink.get_experiment_result()
     
     spinqlablink.disconnect()
 
-    print_graph(result)
+    print_graph(exp_info["result"])
 
 if __name__ == "__main__":
     main()

@@ -94,7 +94,7 @@ spinqlablink.run_experiment()
 spinqlablink.wait_for_experiment_completion()
 
 # 获取结果
-result = spinqlablink.get_experiment_result()
+exp_info = spinqlablink.get_experiment_result()
 
 # 断开连接
 spinqlablink.disconnect()
